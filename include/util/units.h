@@ -263,20 +263,6 @@ Unit<Fac, L, M, T, I, R> u_clamp(const Unit<Fac, L, M, T, I, R> &u,
       std::clamp(u.value(), min.value(), max.value()));
 }
 
-// Angle operations
-constexpr radian_t operator+(const radian_t &a, const radian_t &b) {
-  return radian_t(a.to_base() + b.to_base());
-}
-constexpr radian_t operator-(const radian_t &a, const radian_t &b) {
-  return radian_t(a.to_base() - b.to_base());
-}
-constexpr degree_t operator+(const degree_t &a, const degree_t &b) {
-  return degree_t(a.to_base() + b.to_base());
-}
-constexpr degree_t operator-(const degree_t &a, const degree_t &b) {
-  return degree_t(a.to_base() - b.to_base());
-}
-
 // Trigonometric functions
 static inline double u_sin(const radian_t &a) { return std::sin(a.to_base()); }
 static inline double u_cos(const radian_t &a) { return std::cos(a.to_base()); }
