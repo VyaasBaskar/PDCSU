@@ -54,7 +54,7 @@ private:
   const double t_lo_init = 1e-6, t_hi_init = 4.0;
   const int time_bisect_iters = 15;
   const int feasibility_trials = 60;
-  double beta_gamma_scale = 3.0;
+  double beta_gamma_scale = 5.0;
   const double tolerance = 1e-3;
 
   // Precomputed constants
@@ -63,7 +63,8 @@ private:
   std::array<double, 2> b{};
 
   // Control parameters
-  double zeta, alpha, beta, gamma;
+  double tstar = 0.0, zeta = 0.0, alpha = 0.0, beta = 0.0, gamma = 0.0;
+  double alphaS = 0.0, betaS = 0.0, gammaS = 0.0;
 
 public:
 private:
@@ -185,7 +186,7 @@ private:
       if (max_control_target(t) <= v_max + tolerance)
         return std::make_tuple(zeta, alpha, beta, gamma);
     }
-    zeta = alpha = beta = gamma = 0.0;
+    // zeta = alpha = beta = gamma = 0.0;
     return std::nullopt;
   }
 
@@ -210,9 +211,9 @@ public:
       return std::make_tuple(-1.0, zeta, alpha, beta, gamma);
     }
 
-    auto [zeta, alpha, beta, gamma] = *feas_hi;
+    auto [lzeta, lalpha, lbeta, lgamma] = *feas_hi;
     std::tuple<double, double, double, double, double> best = {
-        t_hi, zeta, alpha, beta, gamma};
+        t_hi, lzeta, lalpha, lbeta, lgamma};
 
     for (int i = 0; i < time_bisect_iters; i++) {
       double t_mid = 0.5 * (t_lo + t_hi);
@@ -225,6 +226,11 @@ public:
         t_lo = t_mid;
       }
     }
+    this->tstar = std::get<0>(best);
+    this->zeta = std::get<1>(best);
+    this->alphaS = std::get<2>(best);
+    this->betaS = std::get<3>(best);
+    this->gammaS = std::get<4>(best);
     return best;
   }
 
@@ -234,23 +240,21 @@ public:
         T(0.0),
         P(0.0),
         v_max(v_max.value()),
-        control_period(def_sys.control_period.value()) {
+        control_period(second_t(def_sys.control_period).value()) {
     findZ_and_inverses(def_bldc.stall_torque.value(), def_sys.inertia.value(),
         radps_t(def_bldc.free_speed).value());
-    zeta = alpha = beta = gamma = 0.0;
+    zeta = alphaS = betaS = gammaS = 0.0;
     setBetaGammaScale();
   }
 
   void setTarget(radian_t T, radps_t P) {
     this->T = T.value();
     this->P = P.value();
-    zeta = alpha = beta = gamma = 0.0;
   }
 
   void setState(radian_t x0, radps_t v0) {
     this->x0 = x0.value();
     this->v0 = v0.value();
-    zeta = alpha = beta = gamma = 0.0;
   }
 
   void setTargetAndState(radian_t T, radps_t P, radian_t x0, radps_t v0) {
@@ -259,14 +263,15 @@ public:
   }
 
   // Note: call optimize() prior to this
-  double getImmediateOutput() { return zeta; }
+  double getImmediateOutput() { return getProjectedOutput(1)[0]; }
 
   // Note: call optimize() prior to this
   std::vector<double> getProjectedOutput(int steps) {
     std::vector<double> output(steps);
-    double t = 0.0;
+    double t = control_period / 2.0;
     for (int i = 0; i < steps; i++) {
-      output[i] = zeta + alpha * t + beta * t * t + gamma * t * t * t;
+      output[i] = zeta + alphaS * t + betaS * t * t + gammaS * t * t * t;
+      if (t > tstar) { output[i] = P; }
       t += control_period;
     }
     return output;

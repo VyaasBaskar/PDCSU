@@ -36,6 +36,8 @@ struct BasePlant {
   std::function<nm_t(radian_t, radps_t)> load_function;
 
   ms_t control_period;
+
+  ohm_t circuit_res;
 };
 
 struct DefLinearSys : BasePlant {
@@ -47,10 +49,11 @@ struct DefLinearSys : BasePlant {
   DefLinearSys(DefBLDC def_bldc, int num_motors,
       UnitDivision<radian_t, meter_t> gear_ratio, mps2_t effective_gravity,
       kg_t mass, newton_t friction,
-      UnitDivision<newton_t, rpm_t> viscous_damping, ms_t control_period)
+      UnitDivision<newton_t, rpm_t> viscous_damping, ms_t control_period,
+      ohm_t circuit_res = 0_u_ohm)
       : BasePlant(plantConstructor(def_bldc, num_motors, gear_ratio,
-            effective_gravity, mass, friction, viscous_damping,
-            control_period)),
+            effective_gravity, mass, friction, viscous_damping, control_period,
+            circuit_res)),
         num_motors(num_motors),
         gear_ratio(gear_ratio) {}
 
@@ -58,7 +61,8 @@ private:
   BasePlant plantConstructor(DefBLDC def_bldc, int num_motors,
       UnitDivision<radian_t, meter_t> gear_ratio, mps2_t effective_gravity,
       kg_t mass, newton_t friction,
-      UnitDivision<newton_t, rpm_t> viscous_damping, ms_t control_period) {
+      UnitDivision<newton_t, rpm_t> viscous_damping, ms_t control_period,
+      ohm_t circuit_res = 0_u_ohm) {
     auto loadfn = [mass, effective_gravity, gear_ratio, num_motors](
                       radian_t theta, radps_t omega) -> nm_t {
       return nm_t(
@@ -71,8 +75,8 @@ private:
     UnitDivision<nm_t, rpm_t> viscfric =
         viscous_damping * 1_u_rad / (gear_ratio * num_motors);
 
-    return BasePlant{
-        def_bldc, refl_inertia, fric, viscfric, loadfn, control_period};
+    return BasePlant{def_bldc, refl_inertia, fric, viscfric, loadfn,
+        control_period, circuit_res};
   }
 };
 
@@ -83,9 +87,9 @@ struct DefArmSys : BasePlant {
   DefArmSys(DefBLDC def_bldc, int num_motors, scalar_t gear_ratio,
       std::function<nm_t(radian_t, radps_t)> loadfn_0, kgm2_t inertia,
       nm_t friction, UnitDivision<nm_t, rpm_t> viscous_damping,
-      ms_t control_period)
+      ms_t control_period, ohm_t circuit_res = 0_u_ohm)
       : BasePlant(plantConstructor(def_bldc, num_motors, gear_ratio, loadfn_0,
-            inertia, friction, viscous_damping, control_period)),
+            inertia, friction, viscous_damping, control_period, circuit_res)),
         num_motors(num_motors),
         gear_ratio(gear_ratio) {}
 
@@ -93,7 +97,7 @@ private:
   BasePlant plantConstructor(DefBLDC def_bldc, int num_motors,
       scalar_t gear_ratio, std::function<nm_t(radian_t, radps_t)> loadfn_0,
       kgm2_t inertia, nm_t friction, UnitDivision<nm_t, rpm_t> viscous_damping,
-      ms_t control_period) {
+      ms_t control_period, ohm_t circuit_res = 0_u_ohm) {
     kgm2_t refl_inertia = inertia / (gear_ratio * gear_ratio * num_motors);
 
     auto loadfn = [loadfn_0, gear_ratio, num_motors](
@@ -106,8 +110,8 @@ private:
     UnitDivision<nm_t, rpm_t> viscfric =
         viscous_damping / (gear_ratio * num_motors);
 
-    return BasePlant{
-        def_bldc, refl_inertia, fric, viscfric, loadfn, control_period};
+    return BasePlant{def_bldc, refl_inertia, fric, viscfric, loadfn,
+        control_period, circuit_res};
   }
 };
 

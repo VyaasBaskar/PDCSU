@@ -71,8 +71,46 @@ struct Unit {
     return Unit(value_ - o.to_base() / factor);
   }
 
+  constexpr Unit operator-() const { return Unit(-value_); }
+
   constexpr Unit operator*(double s) const { return Unit(value_ * s); }
   constexpr Unit operator/(double s) const { return Unit(value_ / s); }
+
+  constexpr Unit operator*=(double s) {
+    value_ *= s;
+    return *this;
+  }
+
+  constexpr Unit operator/=(double s) {
+    value_ /= s;
+    return *this;
+  }
+
+  template <typename Fac2>
+  constexpr Unit &operator+=(const Unit<Fac2, L, M, T, I, R> &o) {
+    value_ += o.to_base() / factor;
+    return *this;
+  }
+
+  template <typename Fac2>
+  constexpr Unit &operator-=(const Unit<Fac2, L, M, T, I, R> &o) {
+    value_ -= o.to_base() / factor;
+    return *this;
+  }
+
+  template <typename Fac2>
+  constexpr Unit &operator*=(const Unit<Fac2, std::ratio<0>, std::ratio<0>,
+      std::ratio<0>, std::ratio<0>, std::ratio<0>> &o) {
+    value_ *= o.to_base() / factor;
+    return *this;
+  }
+
+  template <typename Fac2>
+  constexpr Unit &operator/=(const Unit<Fac2, std::ratio<0>, std::ratio<0>,
+      std::ratio<0>, std::ratio<0>, std::ratio<0>> &o) {
+    value_ /= o.to_base() / factor;
+    return *this;
+  }
 
   template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
       typename R2>
@@ -214,6 +252,15 @@ template <typename Fac, typename L, typename M, typename T, typename I,
     typename R>
 auto u_copysign(const Unit<Fac, L, M, T, I, R> &u, double sign) {
   return Unit<Fac, L, M, T, I, R>(std::copysign(u.value(), sign));
+}
+
+// Clamp
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R>
+Unit<Fac, L, M, T, I, R> u_clamp(const Unit<Fac, L, M, T, I, R> &u,
+    const Unit<Fac, L, M, T, I, R> &min, const Unit<Fac, L, M, T, I, R> &max) {
+  return Unit<Fac, L, M, T, I, R>(
+      std::clamp(u.value(), min.value(), max.value()));
 }
 
 // Angle operations
