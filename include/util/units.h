@@ -289,6 +289,13 @@ static inline radian_t u_atan2(const UY &y, const UX &x) {
 }
 
 // Literals
+
+// Scalar
+inline scalar_t operator"" _u_(long double v) { return scalar_t(v); }
+inline scalar_t operator"" _u_(unsigned long long v) {
+  return scalar_t(static_cast<double>(v));
+}
+
 // Length
 inline meter_t operator"" _u_m(long double v) { return meter_t(v); }
 inline meter_t operator"" _u_m(unsigned long long v) {
@@ -403,6 +410,10 @@ inline fps_t operator"" _u_fps(unsigned long long v) {
 inline fps2_t operator"" _u_fps2(long double v) { return fps2_t(v); }
 inline fps2_t operator"" _u_fps2(unsigned long long v) {
   return fps2_t(static_cast<double>(v));
+}
+inline kgm2_t operator"" _u_kgm2(long double v) { return kgm2_t(v); }
+inline kgm2_t operator"" _u_kgm2(unsigned long long v) {
+  return kgm2_t(static_cast<double>(v));
 }
 
 }

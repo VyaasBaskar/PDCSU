@@ -10,20 +10,31 @@ namespace pdcsu::control {
 class FFModel {
 private:
   BasePlant base_plant;
-  UnitDivision<radps_t, nm_t> velFF_conversion;
+  ohm_t ir;
+  UnitDivision<scalar_t, nm_t> velFF_conversion;
 
 public:
   FFModel(BasePlant def_sys)
       : base_plant(def_sys),
-        velFF_conversion(
-            def_sys.def_bldc.free_speed / def_sys.def_bldc.stall_torque) {}
+        ir(base_plant.def_bldc.operating_voltage /
+            base_plant.def_bldc.stall_current),
+        velFF_conversion((base_plant.circuit_res + ir) /
+                         (ir * def_sys.def_bldc.stall_torque)) {}
 
-  radps_t FF(radian_t theta, radps_t omega, bool cut) const {
+  double FF(radian_t theta, radps_t omega, double cdir, bool cut) const {
     nm_t load = base_plant.load_function(theta, omega);
     nm_t viscous_load = (base_plant.viscous_damping * omega);
     nm_t friction_load = u_copysign(base_plant.friction, omega);
+
+    if (u_abs(omega) < 0.03_u_radps)
+      friction_load = u_copysign(friction_load, 1_u_ * cdir);
+    else if ((cdir > 0.0 && omega < 0.0_u_radps) ||
+             (cdir < 0.0 && omega > 0.0_u_radps))
+      friction_load /= 2.0;
+
+    std::cout << friction_load.value() << std::endl;
     if (cut) viscous_load = friction_load = 0_u_Nm;
-    return (load + viscous_load + friction_load) * velFF_conversion;
+    return ((load + viscous_load + friction_load) * velFF_conversion).value();
   }
 };
 

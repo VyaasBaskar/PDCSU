@@ -51,7 +51,7 @@ private:
   double control_period;
 
   // Solver constants
-  const double t_lo_init = 1e-6, t_hi_init = 4.0;
+  double t_lo_init = 1e-6, t_hi_init = 4.0;
   const int time_bisect_iters = 15;
   const int feasibility_trials = 60;
   double beta_gamma_scale = 5.0;
@@ -74,11 +74,6 @@ private:
     invZ2 = invZ * invZ;
     invZ3 = invZ2 * invZ;
     invZ4 = invZ3 * invZ;
-  }
-
-  inline void setBetaGammaScale() {
-    beta_gamma_scale =
-        1.5 * v_max / (t_hi_init * t_hi_init * t_hi_init * t_hi_init);
   }
 
   // Computes matrices used in solving for the control parameters
@@ -196,19 +191,17 @@ public:
     double t_lo = t_lo_init, t_hi = t_hi_init;
 
     auto feas_hi = solve_if_feasible(t_hi);
-    while (!feas_hi && t_hi < 1e6) {
-      t_hi *= 2.0;
-      feas_hi = solve_if_feasible(t_hi);
-    }
     if (!feas_hi) {
+      std::cout << "nnnnn" << std::endl;
       if (T > x0) {
-        zeta = v_max;
-        alpha = beta = gamma = 0.0;
+        this->zeta = v_max;
       } else {
-        zeta = -v_max;
-        alpha = beta = gamma = 0.0;
+        this->zeta = -v_max;
       }
-      return std::make_tuple(-1.0, zeta, alpha, beta, gamma);
+      this->alphaS = this->betaS = this->gammaS = 0.0;
+      this->tstar = 1000.0;
+      return std::make_tuple(
+          1000.0, this->zeta, this->alphaS, this->betaS, this->gammaS);
     }
 
     auto [lzeta, lalpha, lbeta, lgamma] = *feas_hi;
@@ -244,12 +237,16 @@ public:
     findZ_and_inverses(def_bldc.stall_torque.value(), def_sys.inertia.value(),
         radps_t(def_bldc.free_speed).value());
     zeta = alphaS = betaS = gammaS = 0.0;
-    setBetaGammaScale();
   }
 
   void setTarget(radian_t T, radps_t P) {
     this->T = T.value();
     this->P = P.value();
+    this->t_hi_init =
+        std::min(3.0, 1.35 * std::abs(T.value() - x0) / v_max + 0.35);
+    this->t_lo_init = std::max(0.0, 0.5 * this->t_hi_init - 0.25);
+    beta_gamma_scale = std::min(3.0,
+        std::max(0.05, 3.0 * (std::abs(T.value() - x0) / std::sqrt(v_max))));
   }
 
   void setState(radian_t x0, radps_t v0) {

@@ -21,7 +21,8 @@ struct SimHelper {
     double DC_dmax = (I_lim / def_bldc.stall_current *
                       (winding_res + circuit_res) / winding_res)
                          .value();
-    double v_as_pct = (v0 / def_bldc.free_speed).value();
+
+    double v_as_pct = (v0 / radps_t(def_bldc.free_speed)).value();
     DC = std::clamp(DC, v_as_pct - DC_dmax, v_as_pct + DC_dmax);
 
     // TODO: possibly consider coast mode case
@@ -59,9 +60,14 @@ public:
   void Tick(ms_t dt) {
     radps_t v0 = vel;
 
-    nm_t inh_load = plant.load_function(pos, vel) +
-                    plant.viscous_damping * vel +
-                    u_copysign(plant.friction, vel);
+    nm_t viscous = plant.viscous_damping * vel;
+    nm_t load_func = plant.load_function(pos, vel);
+    nm_t friction =
+        1_u_Nm * std::min(std::abs(plant.friction.value()),
+                     std::abs((load_func + viscous).value() +
+                              DC * plant.def_bldc.stall_torque.value()));
+    friction = u_copysign(nm_t(friction), vel);
+    nm_t inh_load = load_func + viscous + friction;
 
     vel = SimHelper::predict_velocity(dt, v0, DC, I_lim, inh_load + load,
         plant.inertia, plant.def_bldc, plant.circuit_res);
@@ -73,7 +79,10 @@ public:
   void SetCurrentLimit(amp_t limit) { I_lim = limit; }
   void SetLoad(nm_t load) { this->load = load; }
 
-  void setControlTarget(double DC) { this->DC = DC; }
+  void setControlTarget(double DC) {
+    this->DC = DC;
+    DC = std::clamp(DC, -1.0, 1.0);
+  }
 
   radps_t getVelocity() const { return vel; }
   radian_t getPosition() const { return pos; }
