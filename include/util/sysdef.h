@@ -57,6 +57,11 @@ struct DefLinearSys : BasePlant {
         num_motors(num_motors),
         gear_ratio(gear_ratio) {}
 
+  radian_t toNative(meter_t x) { return x * gear_ratio; }
+  meter_t toReal(radian_t x) { return x / gear_ratio; }
+  radps_t toNative(mps_t x) { return x * gear_ratio; }
+  mps_t toReal(radps_t x) { return x / gear_ratio; }
+
 private:
   BasePlant plantConstructor(DefBLDC def_bldc, int num_motors,
       UnitDivision<radian_t, meter_t> gear_ratio, mps2_t effective_gravity,
@@ -92,6 +97,11 @@ struct DefArmSys : BasePlant {
             inertia, friction, viscous_damping, control_period, circuit_res)),
         num_motors(num_motors),
         gear_ratio(gear_ratio) {}
+
+  radian_t toNative(radian_t x) { return x * gear_ratio; }
+  radian_t toReal(radian_t x) { return x / gear_ratio; }
+  radps_t toNative(radps_t x) { return x * gear_ratio; }
+  radps_t toReal(radps_t x) { return x / gear_ratio; }
 
 private:
   BasePlant plantConstructor(DefBLDC def_bldc, int num_motors,

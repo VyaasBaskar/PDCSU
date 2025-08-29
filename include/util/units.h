@@ -153,6 +153,14 @@ struct Unit {
   constexpr bool operator>=(const Unit<Fac2, L, M, T, I, R> &o) const {
     return value_ >= o.to_base() / factor;
   }
+
+  friend constexpr Unit operator*(double lhs, const Unit &rhs) {
+    return scalar_t(lhs) * rhs.value_;
+  }
+
+  friend constexpr Unit operator/(double lhs, const Unit &rhs) {
+    return scalar_t(lhs) / rhs.value_;
+  }
 };
 
 /* Compound Unit Creator */

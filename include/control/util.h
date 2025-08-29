@@ -27,12 +27,11 @@ public:
     nm_t friction_load = u_copysign(base_plant.friction, omega);
 
     if (u_abs(omega) < 0.03_u_radps)
-      friction_load = u_copysign(friction_load, 1_u_ * cdir);
+      friction_load = u_copysign(friction_load, 1.0 * cdir);
     else if ((cdir > 0.0 && omega < 0.0_u_radps) ||
              (cdir < 0.0 && omega > 0.0_u_radps))
-      friction_load /= 2.0;
+      friction_load = 0.0_u_Nm;
 
-    std::cout << friction_load.value() << std::endl;
     if (cut) viscous_load = friction_load = 0_u_Nm;
     return ((load + viscous_load + friction_load) * velFF_conversion).value();
   }
@@ -56,6 +55,11 @@ public:
     }
 
     return reached;
+  }
+
+  void setTolerance(radian_t inner, radian_t outer) {
+    inner_hyst = inner;
+    outer_hyst = outer;
   }
 };
 

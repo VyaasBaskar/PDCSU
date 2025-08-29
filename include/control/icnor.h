@@ -8,9 +8,13 @@
 #include <tuple>
 #include <utility>
 
+#include "control/util.h"
 #include "util/sysdef.h"
 
 /* Inexpensive Constrained Nonlinear Optimal Regulator */
+
+using namespace pdcsu::util;
+using namespace pdcsu::units;
 
 namespace pdcsu::control::icnor_internal {
 
@@ -31,14 +35,6 @@ static constexpr std::pair<double, double> vdc_pair(
   return {vdc(i, base1), vdc(i, base2)};
 }
 
-}
-
-using namespace pdcsu::control::icnor_internal;
-using namespace pdcsu::util;
-using namespace pdcsu::units;
-
-namespace pdcsu::control {
-
 class ICNOR {
 private:
   double Z;  // Z = τ_max / (J * w_f)
@@ -47,6 +43,7 @@ private:
   double T, P;
 
   double v_max;
+  double sysvmax;
 
   double control_period;
 
@@ -192,7 +189,6 @@ public:
 
     auto feas_hi = solve_if_feasible(t_hi);
     if (!feas_hi) {
-      std::cout << "nnnnn" << std::endl;
       if (T > x0) {
         this->zeta = v_max;
       } else {
@@ -227,15 +223,16 @@ public:
     return best;
   }
 
-  ICNOR(DefBLDC def_bldc, BasePlant def_sys, radps_t v_max)
+  ICNOR(BasePlant def_sys, radps_t v_max)
       : x0(0.0),
         v0(0.0),
         T(0.0),
         P(0.0),
         v_max(v_max.value()),
+        sysvmax(radps_t(def_sys.def_bldc.free_speed).value()),
         control_period(second_t(def_sys.control_period).value()) {
-    findZ_and_inverses(def_bldc.stall_torque.value(), def_sys.inertia.value(),
-        radps_t(def_bldc.free_speed).value());
+    findZ_and_inverses(def_sys.def_bldc.stall_torque.value(),
+        def_sys.inertia.value(), radps_t(def_sys.def_bldc.free_speed).value());
     zeta = alphaS = betaS = gammaS = 0.0;
   }
 
@@ -267,8 +264,9 @@ public:
     std::vector<double> output(steps);
     double t = control_period / 2.0;
     for (int i = 0; i < steps; i++) {
-      output[i] = zeta + alphaS * t + betaS * t * t + gammaS * t * t * t;
-      if (t > tstar) { output[i] = P; }
+      output[i] =
+          (zeta + alphaS * t + betaS * t * t + gammaS * t * t * t) / sysvmax;
+      if (t > tstar) { output[i] = (P / sysvmax); }
       t += control_period;
     }
     return output;
@@ -279,9 +277,97 @@ public:
     int steps = static_cast<int>(duration.value() / control_period);
     return getProjectedOutput(steps);
   }
+};
 
-  double getVmax() { return v_max; }
-  double getZ() { return Z; }  // TODO remove these
+}
+
+using namespace pdcsu::control::icnor_internal;
+
+namespace pdcsu::control {
+
+class ICNORPositionControl {
+private:
+  BasePlant plant;
+  FFModel ffModel;
+  SymmetricHysteresis hys;
+  ICNOR* icnor;
+
+  amp_t current_limit;
+  double scaling_factor = 1.0;
+
+  unsigned int projection_horizon = 3U;
+
+  radian_t T_ = 0_u_rad;
+  radps_t P_ = 0_u_radps;
+
+  std::vector<double> projected_output_;
+
+  size_t projection = 0U;
+
+public:
+  ICNORPositionControl(BasePlant plant)
+      : plant(plant),
+        ffModel(plant),
+        hys(0.02_u_rad, 0.05_u_rad),
+        icnor(constructICNOR(plant.def_bldc.free_speed * 0.85)),
+        current_limit(plant.def_bldc.stall_current) {}
+
+  void setConstraints(radps_t v_max, amp_t current_limit) {
+    this->current_limit = current_limit;
+    icnor = constructICNOR(v_max);
+
+    ohm_t ir =
+        (plant.def_bldc.operating_voltage / plant.def_bldc.stall_current);
+
+    nm_t sys_tau_max =
+        plant.def_bldc.stall_torque * ir / (plant.circuit_res + ir);
+    scaling_factor = (current_limit / plant.def_bldc.stall_current).value() *
+                     (plant.def_bldc.stall_torque / sys_tau_max).value();
+    scaling_factor = std::min(scaling_factor, 1.0);
+  }
+
+  void setProjectionHorizon(unsigned int horizon) {
+    this->projection_horizon = horizon;
+  }
+
+  void setTolerance(radian_t inner, radian_t outer) {
+    hys.setTolerance(inner, outer);
+  }
+
+  double getOutput(radian_t T, radps_t P, radian_t x0, radps_t v0) {
+    if (projected_output_.size() == 0U || u_abs(T - T_) > 0.01_u_rad ||
+        u_abs(P - P_) > 0.01_u_radps ||
+        projection >= projected_output_.size()) {
+      icnor->setTargetAndState(T, P, x0, v0);
+      icnor->optimize();
+      projected_output_ = icnor->getProjectedOutput(projection_horizon);
+      projection = 0U;
+      T_ = T;
+      P_ = P;
+    }
+
+    double orig_output = projected_output_[projection++];
+    orig_output =
+        (((plant.def_bldc.free_speed * orig_output - v0) * scaling_factor +
+             v0) /
+            plant.def_bldc.free_speed)
+            .value();
+
+    bool cut = hys.cut(T, x0);
+
+    return (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, orig_output, cut);
+  }
+
+private:
+  ICNOR* constructICNOR(radps_t v_max) {
+    DefBLDC bldc2 = plant.def_bldc;
+    BasePlant defPlant2 = plant;
+    bldc2.stall_current = current_limit;
+    bldc2.stall_torque =
+        bldc2.stall_torque * current_limit / plant.def_bldc.stall_current;
+    defPlant2.def_bldc = bldc2;
+    return new ICNOR(defPlant2, v_max);
+  }
 };
 
 }
