@@ -1,6 +1,5 @@
 #pragma once
-#include <corecrt_math_defines.h>
-
+#include <cmath>
 #include <ratio>
 #include <sstream>
 #include <string>
@@ -155,11 +154,11 @@ struct Unit {
   }
 
   friend constexpr Unit operator*(double lhs, const Unit &rhs) {
-    return scalar_t(lhs) * rhs.value_;
+    return Unit<L, M, T, I, R>(lhs) * rhs.value_;
   }
 
-  friend constexpr Unit operator/(double lhs, const Unit &rhs) {
-    return scalar_t(lhs) / rhs.value_;
+  friend constexpr auto operator/(double lhs, const Unit &rhs) {
+    return Unit<std::ratio<1>>(lhs) / rhs;
   }
 };
 
