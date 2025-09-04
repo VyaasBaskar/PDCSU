@@ -6,6 +6,10 @@
 #include "util/sysdef.h"
 #include "util/units.h"
 
+#ifdef _WIN32
+#include <corecrt_math_defines.h>
+#endif
+
 using namespace pdcsu::units;
 using namespace pdcsu::util;
 
