@@ -11,29 +11,16 @@
 #include "control/util.h"
 #include "util/sysdef.h"
 
+#ifdef _WIN32
+#include "corecrt_math_defines.h"
+#endif
+
 /* Inexpensive Constrained Nonlinear Optimal Regulator */
 
 using namespace pdcsu::util;
 using namespace pdcsu::units;
 
 namespace pdcsu::control::icnor_internal {
-
-// Halton sequence generation
-static constexpr double vdc(int k, int base) {
-  double v = 0.0, denom = 1.0;
-  while (k) {
-    int rem = k % base;
-    k /= base;
-    denom *= base;
-    v += rem / denom;
-  }
-  return v;
-}
-
-static constexpr std::pair<double, double> vdc_pair(
-    int i, int base1, int base2) {
-  return {vdc(i, base1), vdc(i, base2)};
-}
 
 class ICNOR {
 private:
@@ -49,15 +36,13 @@ private:
 
   // Solver constants
   double t_lo_init = 1e-6, t_hi_init = 4.0;
-  const int time_bisect_iters = 15;
-  const int feasibility_trials = 60;
+  const int time_bisect_iters = 7;
+  const int feasibility_trials = 50;
   double beta_gamma_scale = 5.0;
-  const double tolerance = 1e-3;
+  const double tolerance = 1e-7;
 
   // Precomputed constants
   double invZ, invZ2, invZ3, invZ4;
-  std::array<std::array<double, 4>, 2> A{};
-  std::array<double, 2> b{};
 
   // Control parameters
   double tstar = 0.0, zeta = 0.0, alpha = 0.0, beta = 0.0, gamma = 0.0;
@@ -73,28 +58,6 @@ private:
     invZ4 = invZ3 * invZ;
   }
 
-  // Computes matrices used in solving for the control parameters
-  inline void precompute_sys(double t, double E) {
-    double t2 = t * t;
-    double t3 = t2 * t;
-    double t4 = t3 * t;
-
-    A[0][0] = t - invZ + E * invZ;
-    A[0][1] = 0.5 * t2 - t * invZ + invZ2 - E * invZ2;
-    A[0][2] =
-        t3 / 3.0 - t2 * invZ + 2.0 * t * invZ2 - 2.0 * invZ3 + 2.0 * E * invZ3;
-    A[0][3] = t4 / 4.0 - t3 * invZ + 3.0 * t2 * invZ2 - 6.0 * t * invZ3 +
-              6.0 * invZ4 - 6.0 * E * invZ4;
-    b[0] = T - x0 - v0 * invZ + v0 * E * invZ;
-
-    A[1][0] = 1.0 - E;
-    A[1][1] = A[0][0];
-    A[1][2] = t2 - 2.0 * t * invZ + 2.0 * invZ2 - 2.0 * E * invZ2;
-    A[1][3] =
-        t3 - 3.0 * t2 * invZ + 6.0 * t * invZ2 - 6.0 * invZ3 + 6.0 * E * invZ3;
-    b[1] = P - v0 * E;
-  }
-
   // Computes the maximum control target ICNOR attempts to apply
   inline double max_control_target(double t) {
     double vmax_ = fabs(zeta);
@@ -106,47 +69,41 @@ private:
     if (end_val > v_max + tolerance) return end_val;
     vmax_ = std::max(vmax_, end_val);
 
-    double a = 3.0 * gamma;
-    double b = 2.0 * beta;
-    double c = alpha;
+    double tmid = t / 2.0;
+    double tmid2 = tmid * tmid;
+    double tmid3 = tmid2 * tmid;
+    double mid_val = fabs(zeta + alpha * tmid + beta * tmid2 + gamma * tmid3);
+    if (mid_val > v_max + tolerance) return mid_val;
+    vmax_ = std::max(vmax_, mid_val);
 
-    if (fabs(a) < tolerance) {
-      if (fabs(b) > tolerance) {
-        double s = -c / b;
-        if (s > 0.0 && s < t) {
-          double s2 = s * s;
-          double val = fabs(zeta + alpha * s + beta * s2 + gamma * s2 * s);
-          if (val > v_max + tolerance) return val;
-          vmax_ = std::max(vmax_, val);
-        }
-      }
-    } else {
-      double disc = b * b - 4.0 * a * c;
-      if (disc >= 0.0) {
-        double sqrt_disc = sqrt(disc);
-        double s1 = (-b + sqrt_disc) / (2 * a);
-        double s2 = (-b - sqrt_disc) / (2 * a);
-        for (double s : {s1, s2}) {
-          if (s > 0.0 && s < t) {
-            double s2v = s * s;
-            double val = fabs(zeta + alpha * s + beta * s2v + gamma * s2v * s);
-            if (val > v_max + tolerance) return val;
-            vmax_ = std::max(vmax_, val);
-          }
-        }
-      }
-    }
     return vmax_;
   }
 
   // Solves for zeta and alpha, given beta and gamma
   inline std::optional<std::pair<double, double>> solve_zeta_alpha(
-      double beta, double gamma) {
-    double M00 = A[0][0], M01 = A[0][1], N00 = A[0][2], N01 = A[0][3];
-    double M10 = A[1][0], M11 = A[1][1], N10 = A[1][2], N11 = A[1][3];
+      double beta, double gamma, double t) {
+    double t2 = t * t;
+    double t3 = t2 * t;
+    double t4 = t3 * t;
 
-    double rhs0 = b[0] - (N00 * beta + N01 * gamma);
-    double rhs1 = b[1] - (N10 * beta + N11 * gamma);
+    double K = exp(-Z * t);
+
+    double M00 = Z * t - 1.0 + K;
+    double M01 = 0.5 * Z * t2 - t + (1.0 - K) * invZ;
+    double rhs0 = Z * (T - (gamma * t4) / 4.0 - x0) +
+                  (t3 * (beta * Z - 3.0 * gamma)) / 3.0 + 2.0 * beta * t2 +
+                  3.0 * gamma * t2 * invZ + 2.0 * beta * t * invZ +
+                  6.0 * gamma * t * invZ2 - v0 * (1.0 - K) +
+                  2.0 * beta * invZ2 * (1.0 - K) +
+                  6.0 * gamma * invZ3 * (1.0 - K);
+
+    double M10 = 1.0 - K;
+    double M11 = t + invZ * (K - 1.0);
+
+    double rhs1 = P - beta * t2 - gamma * t3 - 2.0 * beta * t * invZ -
+                  3.0 * gamma * t2 * invZ - 2.0 * beta * invZ2 -
+                  6.0 * gamma * t * invZ2 + 6.0 * gamma * invZ3 - v0 * K +
+                  2.0 * beta * K * invZ2 - 6.0 * gamma * K * invZ3;
 
     double det = M00 * M11 - M01 * M10;
     if (fabs(det) < tolerance) return std::nullopt;
@@ -159,26 +116,31 @@ private:
   // Solves the system, if possible in the specified time
   inline std::optional<std::tuple<double, double, double, double>>
   solve_if_feasible(double t) {
-    double E_t = exp(-Z * t);
+    double b_hi = 80000.0;
+    double b_lo = -10.0;
 
-    precompute_sys(t, E_t);
+    std::optional<std::tuple<double, double, double, double>> best_sol;
 
-    double scale = beta_gamma_scale *
-                   std::max({1.0, fabs(P), fabs(v0), fabs(v_max)}) /
-                   std::max(1.0, t);
-
-    for (int i = 1; i <= feasibility_trials; i++) {
-      auto [u, v] = vdc_pair(i, 2, 3);
-      double beta = (u - 0.5) * 2 * scale;
-      double gamma = (v - 0.5) * 2 * scale;
-      auto sol = solve_zeta_alpha(beta, gamma);
-      if (!sol) continue;
-      auto [zeta, alpha] = *sol;
-
-      if (max_control_target(t) <= v_max + tolerance)
-        return std::make_tuple(zeta, alpha, beta, gamma);
+    for (int bisect_iter = 0; bisect_iter < feasibility_trials; ++bisect_iter) {
+      double b = 0.5 * (b_lo + b_hi) * copysign(1.0, T - x0);
+      double g = 1.0 / 2.0 * b;
+      auto sol = solve_zeta_alpha(b, g, t);
+      if (!sol) {
+        b_lo = std::abs(b);
+        continue;
+      }
+      auto [z, a] = *sol;
+      if (max_control_target(t) <= v_max + 2.0) {
+        if (!best_sol || std::abs(b) < std::abs(std::get<2>(*best_sol))) {
+          best_sol = std::make_tuple(z, a, b, g);
+        }
+        b_hi = std::abs(b);
+      } else {
+        b_hi /= 2.0;
+      }
     }
-    // zeta = alpha = beta = gamma = 0.0;
+    if (best_sol) { return best_sol; }
+
     return std::nullopt;
   }
 
@@ -186,6 +148,7 @@ public:
   // Optimizes the control parameters to minimize time
   std::tuple<double, double, double, double, double> optimize() {
     double t_lo = t_lo_init, t_hi = t_hi_init;
+    t_lo -= 0.15;
 
     auto feas_hi = solve_if_feasible(t_hi);
     if (!feas_hi) {
@@ -259,16 +222,56 @@ public:
   // Note: call optimize() prior to this
   double getImmediateOutput() { return getProjectedOutput(1)[0]; }
 
+  double computeAverageUkOverInterval(double t, double dt) {
+    auto integral_poly = [&](double a, double b) {
+      double b2 = b * b, a2 = a * a;
+      double b3 = b2 * b, a3 = a2 * a;
+      double b4 = b3 * b, a4 = a3 * a;
+      return zeta * (b - a) + 0.5 * alphaS * (b2 - a2) +
+             (1.0 / 3.0) * betaS * (b3 - a3) + 0.25 * gammaS * (b4 - a4);
+    };
+
+    double t0 = t;
+    double t1 = t + dt;
+
+    if (t1 <= tstar) {
+      double integral = integral_poly(t0, t1);
+      double avg = integral / dt;
+      return avg / sysvmax;
+    }
+
+    if (t0 >= tstar) { return (P / sysvmax); }
+
+    double integral_before = integral_poly(t0, tstar);
+    double integral_after = P * (t1 - tstar);
+    double integral_total = integral_before + integral_after;
+    double avg = integral_total / dt;
+    return avg / sysvmax;
+  }
+
   // Note: call optimize() prior to this
   std::vector<double> getProjectedOutput(int steps) {
     std::vector<double> output(steps);
-    double t = control_period / 2.0;
-    for (int i = 0; i < steps; i++) {
-      output[i] =
-          (zeta + alphaS * t + betaS * t * t + gammaS * t * t * t) / sysvmax;
-      if (t > tstar) { output[i] = (P / sysvmax); }
-      t += control_period;
+
+    double x = x0;
+    double v = v0;
+    double dt = control_period;
+
+    double K = std::exp(-Z * dt);
+
+    double t = 0.0;
+    for (int i = 0; i < steps; ++i) {
+      double uk = computeAverageUkOverInterval(t, dt) * sysvmax;
+      output[i] = uk / sysvmax;
+
+      double v_next = v * K + uk * (1.0 - K);
+      double x_next = x + (1.0 - K) / Z * v + uk * (dt - (1.0 - K) / Z);
+
+      v = v_next;
+      x = x_next;
+      t += dt;
     }
+
     return output;
   }
 
