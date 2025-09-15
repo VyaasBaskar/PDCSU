@@ -37,8 +37,6 @@ private:
   // Solver constants
   double t_lo_init = 1e-6, t_hi_init = 4.0;
   const int time_bisect_iters = 7;
-  const int feasibility_trials = 50;
-  double beta_gamma_scale = 5.0;
   const double tolerance = 1e-7;
 
   // Precomputed constants
@@ -116,27 +114,53 @@ private:
   // Solves the system, if possible in the specified time
   inline std::optional<std::tuple<double, double, double, double>>
   solve_if_feasible(double t) {
-    double b_hi = 80000.0;
-    double b_lo = -10.0;
-
     std::optional<std::tuple<double, double, double, double>> best_sol;
 
-    for (int bisect_iter = 0; bisect_iter < feasibility_trials; ++bisect_iter) {
-      double b = 0.5 * (b_lo + b_hi) * copysign(1.0, T - x0);
-      double g = 1.0 / 2.0 * b;
-      auto sol = solve_zeta_alpha(b, g, t);
-      if (!sol) {
-        b_lo = std::abs(b);
-        continue;
-      }
+    int coarse_steps = 20;
+    int fine_steps = 40;
+    double b_range = 160000.0;
+    double best_b_real = 0.0;
+    double min_b_abs = std::numeric_limits<double>::max();
+
+    for (int i = 0; i <= coarse_steps; ++i) {
+      double b = b_range * i / coarse_steps;
+      double g = 0.5 * b;
+      double b_real = b * -std::copysign(1.0, T - x0 - 10.0 * v0 / v_max);
+      double g_real = g * -std::copysign(1.0, T - x0 - 10.0 * v0 / v_max);
+      auto sol = solve_zeta_alpha(b_real, g_real, t);
+      if (!sol) continue;
       auto [z, a] = *sol;
       if (max_control_target(t) <= v_max + 2.0) {
-        if (!best_sol || std::abs(b) < std::abs(std::get<2>(*best_sol))) {
-          best_sol = std::make_tuple(z, a, b, g);
+        double b_abs = std::abs(b_real);
+        if (b_abs < min_b_abs) {
+          min_b_abs = b_abs;
+          best_b_real = b_real;
+          best_sol = std::make_tuple(z, a, b_real, g_real);
         }
-        b_hi = std::abs(b);
-      } else {
-        b_hi /= 2.0;
+      }
+    }
+
+    if (min_b_abs < std::numeric_limits<double>::max()) {
+      double fine_b_range = b_range / coarse_steps;
+      for (int i = -fine_steps; i <= fine_steps; ++i) {
+        for (int sign : {-1, 1}) {
+          double b = (best_b_real / -std::copysign(1.0, T - x0)) +
+                     sign * i * fine_b_range / fine_steps;
+          double g = 0.5 * b;
+          double b_real = b * -std::copysign(1.0, T - x0);
+          double g_real = g * -std::copysign(1.0, T - x0);
+          auto sol = solve_zeta_alpha(b_real, g_real, t);
+          if (!sol) continue;
+          auto [z, a] = *sol;
+          if (max_control_target(t) <= v_max + 2.0) {
+            double b_abs = std::abs(b_real);
+            if (b_abs < min_b_abs) {
+              min_b_abs = b_abs;
+              best_b_real = b_real;
+              best_sol = std::make_tuple(z, a, b_real, g_real);
+            }
+          }
+        }
       }
     }
     if (best_sol) { return best_sol; }
@@ -148,7 +172,6 @@ public:
   // Optimizes the control parameters to minimize time
   std::tuple<double, double, double, double, double> optimize() {
     double t_lo = t_lo_init, t_hi = t_hi_init;
-    t_lo -= 0.15;
 
     auto feas_hi = solve_if_feasible(t_hi);
     if (!feas_hi) {
@@ -204,9 +227,7 @@ public:
     this->P = P.value();
     this->t_hi_init =
         std::min(3.0, 1.35 * std::abs(T.value() - x0) / v_max + 0.35);
-    this->t_lo_init = std::max(0.0, 0.5 * this->t_hi_init - 0.25);
-    beta_gamma_scale = std::min(3.0,
-        std::max(0.05, 3.0 * (std::abs(T.value() - x0) / std::sqrt(v_max))));
+    this->t_lo_init = std::max(-0.5, 0.5 * this->t_hi_init - 0.5);
   }
 
   void setState(radian_t x0, radps_t v0) {
@@ -259,7 +280,7 @@ public:
 
     double K = std::exp(-Z * dt);
 
-    double t = 0.0;
+    double t = steps <= 1 ? 0.0 : control_period * 0.5;
     for (int i = 0; i < steps; ++i) {
       double uk = computeAverageUkOverInterval(t, dt) * sysvmax;
       output[i] = uk / sysvmax;
@@ -340,7 +361,7 @@ public:
   double getOutput(radian_t T, radps_t P, radian_t x0, radps_t v0) {
     if (projected_output_.size() == 0U || u_abs(T - T_) > 0.01_u_rad ||
         u_abs(P - P_) > 0.01_u_radps ||
-        projection >= projected_output_.size()) {
+        projection >= projected_output_.size() - 1) {
       icnor->setTargetAndState(T, P, x0, v0);
       icnor->optimize();
       projected_output_ = icnor->getProjectedOutput(projection_horizon);
@@ -366,8 +387,13 @@ private:
     DefBLDC bldc2 = plant.def_bldc;
     BasePlant defPlant2 = plant;
     bldc2.stall_current = current_limit;
-    bldc2.stall_torque =
-        bldc2.stall_torque * current_limit / plant.def_bldc.stall_current;
+    double ir =
+        (plant.def_bldc.operating_voltage / plant.def_bldc.stall_current)
+            .value();
+
+    bldc2.stall_torque = bldc2.stall_torque * current_limit /
+                         plant.def_bldc.stall_current *
+                         (plant.circuit_res.value() + ir) / ir;
     defPlant2.def_bldc = bldc2;
     return new ICNOR(defPlant2, v_max);
   }

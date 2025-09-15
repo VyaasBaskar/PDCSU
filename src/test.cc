@@ -16,19 +16,18 @@ using namespace pdcsu::simulation;
 int main() {
   DefBLDC def_bldc(105_u_A, 1.8_u_A, 2.5_u_Nm, 5676_u_rpm);
   DefLinearSys def_sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 0.0_u_mps2,
-      3_u_kg, 40_u_N, 3_u_N / 5676_u_rpm, 20_u_ms);
+      5_u_kg, 22_u_N, 0.5_u_N / 5676_u_rpm, 20_u_ms, 0.028_u_ohm);
 
-  amp_t clim = 40_u_A;
+  amp_t clim = 20_u_A;
 
   ICNORPositionControl icnor(def_sys);
   icnor.setProjectionHorizon(1);
-
-  auto x = 45_u_in;
 
   SimBLDC simBldc = SimBLDC(def_sys);
   simBldc.SetCurrentLimit(clim);
 
   icnor.setConstraints(5000_u_rpm, clim);
+  icnor.setTolerance(def_sys.toNative(0.25_u_in), def_sys.toNative(0.5_u_in));
 
   std::ofstream data_file("sim_data.csv");
   data_file << "step,pos,vel,output\n";
@@ -45,7 +44,7 @@ int main() {
     double vel = fps_t(def_sys.toReal(simBldc.getVelocity())).value();
     data_file << i << "," << pos << "," << vel << "\n";
     std::cout << "Step " << i << ": pos=" << pos << " in, vel=" << vel
-              << " ft/s, x=" << x.value() << std::endl;
+              << " ft/s" << std::endl;
 
     v_time.push_back(i * def_sys.control_period.value() / 1000.0);
     v_pos.push_back(pos);
