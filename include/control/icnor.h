@@ -116,9 +116,9 @@ private:
   solve_if_feasible(double t) {
     std::optional<std::tuple<double, double, double, double>> best_sol;
 
-    int coarse_steps = 20;
-    int fine_steps = 40;
-    double b_range = 160000.0;
+    int coarse_steps = 8;
+    int fine_steps = 10;
+    double b_range = 80000.0;
     double best_b_real = 0.0;
     double min_b_abs = std::numeric_limits<double>::max();
 
@@ -392,8 +392,10 @@ private:
             .value();
 
     bldc2.stall_torque = bldc2.stall_torque * current_limit /
-                         plant.def_bldc.stall_current *
-                         (plant.circuit_res.value() + ir) / ir;
+                         u_min(plant.def_bldc.stall_current,
+                             plant.def_bldc.stall_current *
+                                 (plant.circuit_res.value() + ir) / ir) *
+                         0.95;
     defPlant2.def_bldc = bldc2;
     return new ICNOR(defPlant2, v_max);
   }

@@ -16,12 +16,12 @@ using namespace pdcsu::simulation;
 int main() {
   DefBLDC def_bldc(105_u_A, 1.8_u_A, 2.5_u_Nm, 5676_u_rpm);
   DefLinearSys def_sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 0.0_u_mps2,
-      5_u_kg, 22_u_N, 0.5_u_N / 5676_u_rpm, 20_u_ms, 0.028_u_ohm);
+      3_u_kg, 22_u_N, 0.5_u_N / 5676_u_rpm, 20_u_ms, 0.028_u_ohm);
 
-  amp_t clim = 20_u_A;
+  amp_t clim = 50_u_A;
 
   ICNORPositionControl icnor(def_sys);
-  icnor.setProjectionHorizon(1);
+  icnor.setProjectionHorizon(3);
 
   SimBLDC simBldc = SimBLDC(def_sys);
   simBldc.SetCurrentLimit(clim);

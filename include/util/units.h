@@ -270,6 +270,21 @@ Unit<Fac, L, M, T, I, R> u_clamp(const Unit<Fac, L, M, T, I, R> &u,
       std::clamp(u.value(), min.value(), max.value()));
 }
 
+// Min/Max
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R>
+constexpr Unit<Fac, L, M, T, I, R> u_min(
+    const Unit<Fac, L, M, T, I, R> &a, const Unit<Fac, L, M, T, I, R> &b) {
+  return (a.value() < b.value()) ? a : b;
+}
+
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R>
+constexpr Unit<Fac, L, M, T, I, R> u_max(
+    const Unit<Fac, L, M, T, I, R> &a, const Unit<Fac, L, M, T, I, R> &b) {
+  return (a.value() > b.value()) ? a : b;
+}
+
 // Trigonometric functions
 static inline double u_sin(const radian_t &a) { return std::sin(a.to_base()); }
 static inline double u_cos(const radian_t &a) { return std::cos(a.to_base()); }
