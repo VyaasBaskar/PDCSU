@@ -1,6 +1,6 @@
 #pragma once
 #include <cmath>
-#include <ratio>
+#include <cstdint>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -8,10 +8,139 @@
 /* A PDCSU Units Library to enforce type safety for physical quantities */
 
 namespace pdcsu::units {
+namespace detail {
+
+constexpr std::int64_t abs_i64(std::int64_t v) { return v < 0 ? -v : v; }
+
+constexpr std::int64_t gcd_i64(std::int64_t a, std::int64_t b) {
+  return b == 0 ? abs_i64(a) : gcd_i64(b, a % b);
+}
+
+constexpr std::int64_t lcm_i64(std::int64_t a, std::int64_t b) {
+  return (a == 0 || b == 0) ? 0 : abs_i64(a / gcd_i64(a, b) * b);
+}
+
+template <std::int64_t Num, std::int64_t Den = 1> struct Fraction {
+  static_assert(Den != 0, "Fraction denominator cannot be zero.");
+
+private:
+  static constexpr std::int64_t g = gcd_i64(Num, Den);
+  static constexpr std::int64_t adjusted_num = (Den < 0 ? -Num : Num);
+  static constexpr std::int64_t adjusted_den = abs_i64(Den);
+
+public:
+  static constexpr std::int64_t num = adjusted_num / (g == 0 ? 1 : g);
+  static constexpr std::int64_t den = adjusted_den / (g == 0 ? 1 : g);
+};
+
+template <typename F> struct fraction_negate {
+  using type = Fraction<-F::num, F::den>;
+};
+template <typename F>
+using fraction_negate_t = typename fraction_negate<F>::type;
+
+template <typename F1, typename F2> struct fraction_add {
+  static constexpr std::int64_t common_den = lcm_i64(F1::den, F2::den);
+  using type = Fraction<F1::num *(common_den / F1::den) +
+                            F2::num *(common_den / F2::den),
+      common_den>;
+};
+template <typename F1, typename F2>
+using fraction_add_t = typename fraction_add<F1, F2>::type;
+
+template <typename F1, typename F2> struct fraction_subtract {
+  static constexpr std::int64_t common_den = lcm_i64(F1::den, F2::den);
+  using type = Fraction<F1::num *(common_den / F1::den) -
+                            F2::num *(common_den / F2::den),
+      common_den>;
+};
+template <typename F1, typename F2>
+using fraction_subtract_t = typename fraction_subtract<F1, F2>::type;
+
+template <typename F1, typename F2> struct fraction_multiply {
+  using type = Fraction<F1::num * F2::num, F1::den * F2::den>;
+};
+template <typename F1, typename F2>
+using fraction_multiply_t = typename fraction_multiply<F1, F2>::type;
+
+template <typename F1, typename F2> struct fraction_divide {
+  static_assert(F2::num != 0, "Cannot divide by zero fraction.");
+  using type = Fraction<F1::num * F2::den, F1::den * F2::num>;
+};
+template <typename F1, typename F2>
+using fraction_divide_t = typename fraction_divide<F1, F2>::type;
+
+template <typename F> inline constexpr bool fraction_is_zero_v = (F::num == 0);
+
+template <typename F1, typename F2>
+inline constexpr bool fractions_equal_v =
+    (F1::num == F2::num && F1::den == F2::den);
+
+enum class UnitSystem : std::uint8_t { Metric, Imperial, Mixed };
+
+template <UnitSystem SystemValue, const char *SymbolLiteral> struct DimTagBase {
+  static constexpr UnitSystem system = SystemValue;
+  static constexpr const char *symbol() { return SymbolLiteral; }
+};
+
+inline constexpr const char kSymbolM[] = "m";
+inline constexpr const char kSymbolFt[] = "ft";
+inline constexpr const char kSymbolIn[] = "in";
+inline constexpr const char kSymbolKg[] = "kg";
+inline constexpr const char kSymbolLb[] = "lb";
+inline constexpr const char kSymbolS[] = "s";
+inline constexpr const char kSymbolMin[] = "min";
+inline constexpr const char kSymbolMs[] = "ms";
+inline constexpr const char kSymbolA[] = "A";
+inline constexpr const char kSymbolRad[] = "rad";
+inline constexpr const char kSymbolDeg[] = "deg";
+inline constexpr const char kSymbolRot[] = "rot";
+
+using LengthMetricTag = DimTagBase<UnitSystem::Metric, kSymbolM>;
+using LengthFootTag = DimTagBase<UnitSystem::Imperial, kSymbolFt>;
+using LengthInchTag = DimTagBase<UnitSystem::Imperial, kSymbolIn>;
+using LengthMixedTag = DimTagBase<UnitSystem::Mixed, kSymbolM>;
+
+using MassMetricTag = DimTagBase<UnitSystem::Metric, kSymbolKg>;
+using MassPoundTag = DimTagBase<UnitSystem::Imperial, kSymbolLb>;
+using MassMixedTag = DimTagBase<UnitSystem::Mixed, kSymbolKg>;
+
+using TimeSecondTag = DimTagBase<UnitSystem::Metric, kSymbolS>;
+using TimeMinuteTag = DimTagBase<UnitSystem::Imperial, kSymbolMin>;
+using TimeMillisecondTag = DimTagBase<UnitSystem::Metric, kSymbolMs>;
+using TimeMixedTag = DimTagBase<UnitSystem::Mixed, kSymbolS>;
+
+using CurrentAmpTag = DimTagBase<UnitSystem::Metric, kSymbolA>;
+using CurrentMixedTag = DimTagBase<UnitSystem::Mixed, kSymbolA>;
+
+using AngleRadTag = DimTagBase<UnitSystem::Metric, kSymbolRad>;
+using AngleDegreeTag = DimTagBase<UnitSystem::Imperial, kSymbolDeg>;
+using AngleRotationTag = DimTagBase<UnitSystem::Imperial, kSymbolRot>;
+using AngleMixedTag = DimTagBase<UnitSystem::Mixed, kSymbolRad>;
+
+template <typename Exp1, typename Exp2, typename Tag1, typename Tag2,
+    typename MixedTag>
+struct combine_dim_tag {
+  using type = std::conditional_t<fraction_is_zero_v<Exp1>,
+      std::conditional_t<fraction_is_zero_v<Exp2>, Tag1, Tag2>,
+      std::conditional_t<fraction_is_zero_v<Exp2>, Tag1,
+          std::conditional_t<std::is_same_v<Tag1, Tag2>, Tag1, MixedTag>>>;
+};
+
+template <typename Exp1, typename Exp2, typename Tag1, typename Tag2,
+    typename MixedTag>
+using combine_dim_tag_t =
+    typename combine_dim_tag<Exp1, Exp2, Tag1, Tag2, MixedTag>::type;
+
+}  // namespace detail
 // Base Unit
-template <typename Fac = std::ratio<1>, typename L = std::ratio<0>,
-    typename M = std::ratio<0>, typename T = std::ratio<0>,
-    typename I = std::ratio<0>, typename R = std::ratio<0>>
+template <typename Fac = detail::Fraction<1>, typename L = detail::Fraction<0>,
+    typename M = detail::Fraction<0>, typename T = detail::Fraction<0>,
+    typename I = detail::Fraction<0>, typename R = detail::Fraction<0>,
+    typename LTag = detail::LengthMetricTag,
+    typename MTag = detail::MassMetricTag,
+    typename TTag = detail::TimeSecondTag,
+    typename ITag = detail::CurrentAmpTag, typename RTag = detail::AngleRadTag>
 
 struct Unit {
   using L_exp = L;
@@ -20,191 +149,544 @@ struct Unit {
   using I_exp = I;
   using R_exp = R;
   using Fac_ = Fac;
+  using L_tag = LTag;
+  using M_tag = MTag;
+  using T_tag = TTag;
+  using I_tag = ITag;
+  using R_tag = RTag;
 
-  double value_;
+  double base_value_;
   static constexpr double factor = Fac::num * 1.0 / Fac::den;
 
-  constexpr explicit Unit(double v) : value_(v) {}
+private:
+  template <typename Lr, typename Mr, typename Tr, typename Ir, typename Rr>
+  struct DimensionSummary {
+    static constexpr auto length_num = Lr::num;
+    static constexpr auto length_den = Lr::den;
+    static constexpr auto mass_num = Mr::num;
+    static constexpr auto mass_den = Mr::den;
+    static constexpr auto time_num = Tr::num;
+    static constexpr auto time_den = Tr::den;
+    static constexpr auto current_num = Ir::num;
+    static constexpr auto current_den = Ir::den;
+    static constexpr auto angle_num = Rr::num;
+    static constexpr auto angle_den = Rr::den;
+  };
 
-  constexpr double to_base() const { return value_ * factor; }
+  template <typename LTagT, typename MTagT, typename TTagT, typename ITagT,
+      typename RTagT>
+  struct TagSummary {
+    static constexpr detail::UnitSystem length_system = LTagT::system;
+    static constexpr const char *length_symbol = LTagT::symbol();
+    static constexpr detail::UnitSystem mass_system = MTagT::system;
+    static constexpr const char *mass_symbol = MTagT::symbol();
+    static constexpr detail::UnitSystem time_system = TTagT::system;
+    static constexpr const char *time_symbol = TTagT::symbol();
+    static constexpr detail::UnitSystem current_system = ITagT::system;
+    static constexpr const char *current_symbol = ITagT::symbol();
+    static constexpr detail::UnitSystem angle_system = RTagT::system;
+    static constexpr const char *angle_symbol = RTagT::symbol();
+  };
+
+public:
+  template <typename L2, typename M2, typename T2, typename I2, typename R2>
+  static constexpr bool same_dimensions() {
+    return detail::fractions_equal_v<L, L2> &&
+           detail::fractions_equal_v<M, M2> &&
+           detail::fractions_equal_v<T, T2> &&
+           detail::fractions_equal_v<I, I2> && detail::fractions_equal_v<R, R2>;
+  }
+
+  template <typename L2, typename M2, typename T2, typename I2, typename R2>
+  static constexpr bool is_dimensionless() {
+    return detail::fraction_is_zero_v<L2> && detail::fraction_is_zero_v<M2> &&
+           detail::fraction_is_zero_v<T2> && detail::fraction_is_zero_v<I2> &&
+           detail::fraction_is_zero_v<R2>;
+  }
+
+  constexpr Unit() : base_value_(0.0) {}
+  constexpr explicit Unit(double v) : base_value_(v * factor) {}
+
+  constexpr double to_base() const { return base_value_; }
+
+  static constexpr Unit from_base(double base) {
+    Unit u;
+    u.base_value_ = base;
+    return u;
+  }
 
   template <typename Ratio>
-  void __internal_concat_dim(std::ostringstream &oss, const char *name) {
+  void __internal_concat_dim(std::ostringstream &oss, const char *symbol) const {
     if constexpr (Ratio::num != 0) {
       if constexpr (Ratio::num == 1 && Ratio::den == 1)
-        oss << name << " ";
+        oss << symbol << " ";
       else if constexpr (Ratio::den != 1)
-        oss << name << "^" << Ratio::num << "/" << Ratio::den << " ";
+        oss << symbol << "^" << Ratio::num << "/" << Ratio::den << " ";
       else
-        oss << name << "^" << Ratio::num << " ";
+        oss << symbol << "^" << Ratio::num << " ";
     }
   }
 
   std::string dims() const {
-    std::ostringstream oss;
+    std::ostringstream body_stream;
 
-    __internal_concat_dim<L_exp>(oss, "m");
-    __internal_concat_dim<M_exp>(oss, "kg");
-    __internal_concat_dim<T_exp>(oss, "s");
-    __internal_concat_dim<I_exp>(oss, "A");
-    __internal_concat_dim<R_exp>(oss, "rad");
+    if constexpr (!detail::fraction_is_zero_v<L_exp>) {
+      __internal_concat_dim<L_exp>(body_stream, L_tag::symbol());
+    }
+    if constexpr (!detail::fraction_is_zero_v<M_exp>) {
+      __internal_concat_dim<M_exp>(body_stream, M_tag::symbol());
+    }
+    if constexpr (!detail::fraction_is_zero_v<T_exp>) {
+      __internal_concat_dim<T_exp>(body_stream, T_tag::symbol());
+    }
+    if constexpr (!detail::fraction_is_zero_v<I_exp>) {
+      __internal_concat_dim<I_exp>(body_stream, I_tag::symbol());
+    }
+    if constexpr (!detail::fraction_is_zero_v<R_exp>) {
+      __internal_concat_dim<R_exp>(body_stream, R_tag::symbol());
+    }
 
-    std::string result = oss.str();
-    if (!result.empty()) { result.pop_back(); }
-    return result;
+    std::string body = body_stream.str();
+    if (!body.empty()) { body.pop_back(); }
+    return body;
   }
 
-  template <typename Fac2>
-  constexpr Unit(const Unit<Fac2, L, M, T, I, R> &o)
-      : value_(o.to_base() / factor) {}
-
-  constexpr double value() const { return value_; }
-
-  template <typename Fac2>
-  constexpr auto operator+(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return Unit(value_ + o.to_base() / factor);
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2,
+      typename = std::enable_if_t<
+          same_dimensions<L2, M2, T2, I2, R2>(), int>>
+  constexpr Unit(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o)
+      : base_value_(o.to_base()) {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit conversion requires matching (L,M,T,I,R); compare "
+        "__pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
   }
 
-  template <typename Fac2>
-  constexpr auto operator-(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return Unit(value_ - o.to_base() / factor);
+  constexpr double value() const { return base_value_ / factor; }
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr Unit operator+(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit::operator+: requires matching (L,M,T,I,R); compare "
+        "__pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return Unit::from_base(base_value_ + o.to_base());
   }
 
-  constexpr Unit operator-() const { return Unit(-value_); }
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr Unit operator-(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit::operator-: requires matching (L,M,T,I,R); compare "
+        "__pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return Unit::from_base(base_value_ - o.to_base());
+  }
 
-  constexpr Unit operator*(double s) const { return Unit(value_ * s); }
-  constexpr Unit operator/(double s) const { return Unit(value_ / s); }
+  constexpr Unit operator-() const { return Unit::from_base(-base_value_); }
+
+  constexpr Unit operator*(double s) const {
+    return Unit::from_base(base_value_ * s);
+  }
+  constexpr Unit operator/(double s) const {
+    return Unit::from_base(base_value_ / s);
+  }
 
   constexpr Unit operator*=(double s) {
-    value_ *= s;
+    base_value_ *= s;
     return *this;
   }
 
   constexpr Unit operator/=(double s) {
-    value_ /= s;
-    return *this;
-  }
-
-  template <typename Fac2>
-  constexpr Unit &operator+=(const Unit<Fac2, L, M, T, I, R> &o) {
-    value_ += o.to_base() / factor;
-    return *this;
-  }
-
-  template <typename Fac2>
-  constexpr Unit &operator-=(const Unit<Fac2, L, M, T, I, R> &o) {
-    value_ -= o.to_base() / factor;
-    return *this;
-  }
-
-  template <typename Fac2>
-  constexpr Unit &operator*=(const Unit<Fac2, std::ratio<0>, std::ratio<0>,
-      std::ratio<0>, std::ratio<0>, std::ratio<0>> &o) {
-    value_ *= o.to_base() / factor;
-    return *this;
-  }
-
-  template <typename Fac2>
-  constexpr Unit &operator/=(const Unit<Fac2, std::ratio<0>, std::ratio<0>,
-      std::ratio<0>, std::ratio<0>, std::ratio<0>> &o) {
-    value_ /= o.to_base() / factor;
+    base_value_ /= s;
     return *this;
   }
 
   template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
-      typename R2>
-  constexpr auto operator*(const Unit<Fac2, L2, M2, T2, I2, R2> &o) const {
-    return Unit<std::ratio_multiply<Fac, Fac2>, std::ratio_add<L, L2>,
-        std::ratio_add<M, M2>, std::ratio_add<T, T2>, std::ratio_add<I, I2>,
-        std::ratio_add<R, R2>>(value() * o.value());
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr Unit &operator+=(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit::operator+= requires matching (L,M,T,I,R); compare "
+        "__pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    base_value_ += o.to_base();
+    return *this;
   }
 
   template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
-      typename R2>
-  constexpr auto operator/(const Unit<Fac2, L2, M2, T2, I2, R2> &o) const {
-    return Unit<std::ratio_divide<Fac, Fac2>, std::ratio_subtract<L, L2>,
-        std::ratio_subtract<M, M2>, std::ratio_subtract<T, T2>,
-        std::ratio_subtract<I, I2>, std::ratio_subtract<R, R2>>(
-        value() / o.value());
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr Unit &operator-=(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit::operator-= requires matching (L,M,T,I,R); compare "
+        "__pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    base_value_ -= o.to_base();
+    return *this;
   }
 
-  template <typename Fac2>
-  constexpr bool operator==(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return value_ == o.to_base() / factor;
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr Unit &operator*=(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) {
+    using __pdcsu_units_scaling_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    static_assert(is_dimensionless<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit::operator*= requires the scaling unit to be "
+        "dimensionless (L = M = T = I = R = 0). Inspect "
+        "__pdcsu_units_scaling_dims for exponent details.");
+    base_value_ *= o.to_base();
+    return *this;
   }
-  template <typename Fac2>
-  constexpr bool operator!=(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return value_ != o.to_base() / factor;
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr Unit &operator/=(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) {
+    using __pdcsu_units_scaling_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    static_assert(is_dimensionless<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit::operator/= requires the scaling unit to be "
+        "dimensionless (L = M = T = I = R = 0). Inspect "
+        "__pdcsu_units_scaling_dims for exponent details.");
+    base_value_ /= o.to_base();
+    return *this;
   }
-  template <typename Fac2>
-  constexpr bool operator<(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return value_ < o.to_base() / factor;
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr auto operator*(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using ResultLTag = detail::combine_dim_tag_t<L_exp, L2, LTag, LTag2,
+        detail::LengthMixedTag>;
+    using ResultMTag =
+        detail::combine_dim_tag_t<M_exp, M2, MTag, MTag2, detail::MassMixedTag>;
+    using ResultTTag =
+        detail::combine_dim_tag_t<T_exp, T2, TTag, TTag2, detail::TimeMixedTag>;
+    using ResultITag = detail::combine_dim_tag_t<I_exp, I2, ITag, ITag2,
+        detail::CurrentMixedTag>;
+    using ResultRTag = detail::combine_dim_tag_t<R_exp, R2, RTag, RTag2,
+        detail::AngleMixedTag>;
+    using ResultUnit = Unit<detail::fraction_multiply_t<Fac, Fac2>,
+        detail::fraction_add_t<L, L2>, detail::fraction_add_t<M, M2>,
+        detail::fraction_add_t<T, T2>, detail::fraction_add_t<I, I2>,
+        detail::fraction_add_t<R, R2>, ResultLTag, ResultMTag, ResultTTag,
+        ResultITag, ResultRTag>;
+    return ResultUnit::from_base(base_value_ * o.to_base());
   }
-  template <typename Fac2>
-  constexpr bool operator<=(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return value_ <= o.to_base() / factor;
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr auto operator/(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using ResultLTag = detail::combine_dim_tag_t<L_exp,
+        detail::fraction_negate_t<L2>, LTag, LTag2, detail::LengthMixedTag>;
+    using ResultMTag = detail::combine_dim_tag_t<M_exp,
+        detail::fraction_negate_t<M2>, MTag, MTag2, detail::MassMixedTag>;
+    using ResultTTag = detail::combine_dim_tag_t<T_exp,
+        detail::fraction_negate_t<T2>, TTag, TTag2, detail::TimeMixedTag>;
+    using ResultITag = detail::combine_dim_tag_t<I_exp,
+        detail::fraction_negate_t<I2>, ITag, ITag2, detail::CurrentMixedTag>;
+    using ResultRTag = detail::combine_dim_tag_t<R_exp,
+        detail::fraction_negate_t<R2>, RTag, RTag2, detail::AngleMixedTag>;
+    using ResultUnit = Unit<detail::fraction_divide_t<Fac, Fac2>,
+        detail::fraction_subtract_t<L, L2>, detail::fraction_subtract_t<M, M2>,
+        detail::fraction_subtract_t<T, T2>, detail::fraction_subtract_t<I, I2>,
+        detail::fraction_subtract_t<R, R2>, ResultLTag, ResultMTag, ResultTTag,
+        ResultITag, ResultRTag>;
+    return ResultUnit::from_base(base_value_ / o.to_base());
   }
-  template <typename Fac2>
-  constexpr bool operator>(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return value_ > o.to_base() / factor;
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr bool operator==(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit comparison (==) requires matching (L,M,T,I,R); "
+        "compare __pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return base_value_ == o.to_base();
   }
-  template <typename Fac2>
-  constexpr bool operator>=(const Unit<Fac2, L, M, T, I, R> &o) const {
-    return value_ >= o.to_base() / factor;
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr bool operator!=(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit comparison (!=) requires matching (L,M,T,I,R); "
+        "compare __pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return base_value_ != o.to_base();
+  }
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr bool operator<(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit comparison (<) requires matching (L,M,T,I,R); "
+        "compare __pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return base_value_ < o.to_base();
+  }
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr bool operator<=(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit comparison (<=) requires matching (L,M,T,I,R); "
+        "compare __pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return base_value_ <= o.to_base();
+  }
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr bool operator>(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit comparison (>) requires matching (L,M,T,I,R); "
+        "compare __pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return base_value_ > o.to_base();
+  }
+
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr bool operator>=(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit comparison (>=) requires matching (L,M,T,I,R); "
+        "compare __pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return base_value_ >= o.to_base();
   }
 
   friend constexpr Unit operator*(double lhs, const Unit &rhs) {
-    return Unit<L, M, T, I, R>(lhs) * rhs.value_;
+    return Unit::from_base(lhs * rhs.to_base());
   }
 
   friend constexpr auto operator/(double lhs, const Unit &rhs) {
-    return Unit<std::ratio<1>>(lhs) / rhs;
+    return Unit<detail::Fraction<1>>::from_base(lhs) / rhs;
   }
 };
+
+template <typename U1, typename U2>
+inline constexpr bool is_same_dimension_v =
+    detail::fractions_equal_v<typename U1::L_exp, typename U2::L_exp> &&
+    detail::fractions_equal_v<typename U1::M_exp, typename U2::M_exp> &&
+    detail::fractions_equal_v<typename U1::T_exp, typename U2::T_exp> &&
+    detail::fractions_equal_v<typename U1::I_exp, typename U2::I_exp> &&
+    detail::fractions_equal_v<typename U1::R_exp, typename U2::R_exp>;
 
 /* Compound Unit Creator */
 
 template <typename U1, typename U2>
 using UnitCompound =
-    Unit<std::ratio_multiply<typename U1::Fac_, typename U2::Fac_>,
-        std::ratio_add<typename U1::L_exp, typename U2::L_exp>,
-        std::ratio_add<typename U1::M_exp, typename U2::M_exp>,
-        std::ratio_add<typename U1::T_exp, typename U2::T_exp>,
-        std::ratio_add<typename U1::I_exp, typename U2::I_exp>,
-        std::ratio_add<typename U1::R_exp, typename U2::R_exp>>;
+    Unit<detail::fraction_multiply_t<typename U1::Fac_, typename U2::Fac_>,
+        detail::fraction_add_t<typename U1::L_exp, typename U2::L_exp>,
+        detail::fraction_add_t<typename U1::M_exp, typename U2::M_exp>,
+        detail::fraction_add_t<typename U1::T_exp, typename U2::T_exp>,
+        detail::fraction_add_t<typename U1::I_exp, typename U2::I_exp>,
+        detail::fraction_add_t<typename U1::R_exp, typename U2::R_exp>,
+        detail::combine_dim_tag_t<typename U1::L_exp, typename U2::L_exp,
+            typename U1::L_tag, typename U2::L_tag, detail::LengthMixedTag>,
+        detail::combine_dim_tag_t<typename U1::M_exp, typename U2::M_exp,
+            typename U1::M_tag, typename U2::M_tag, detail::MassMixedTag>,
+        detail::combine_dim_tag_t<typename U1::T_exp, typename U2::T_exp,
+            typename U1::T_tag, typename U2::T_tag, detail::TimeMixedTag>,
+        detail::combine_dim_tag_t<typename U1::I_exp, typename U2::I_exp,
+            typename U1::I_tag, typename U2::I_tag, detail::CurrentMixedTag>,
+        detail::combine_dim_tag_t<typename U1::R_exp, typename U2::R_exp,
+            typename U1::R_tag, typename U2::R_tag, detail::AngleMixedTag>>;
 
 /* Divided Unit Creator */
 template <typename U1, typename U2>
 using UnitDivision =
-    Unit<std::ratio_divide<typename U1::Fac_, typename U2::Fac_>,
-        std::ratio_subtract<typename U1::L_exp, typename U2::L_exp>,
-        std::ratio_subtract<typename U1::M_exp, typename U2::M_exp>,
-        std::ratio_subtract<typename U1::T_exp, typename U2::T_exp>,
-        std::ratio_subtract<typename U1::I_exp, typename U2::I_exp>,
-        std::ratio_subtract<typename U1::R_exp, typename U2::R_exp>>;
+    Unit<detail::fraction_divide_t<typename U1::Fac_, typename U2::Fac_>,
+        detail::fraction_subtract_t<typename U1::L_exp, typename U2::L_exp>,
+        detail::fraction_subtract_t<typename U1::M_exp, typename U2::M_exp>,
+        detail::fraction_subtract_t<typename U1::T_exp, typename U2::T_exp>,
+        detail::fraction_subtract_t<typename U1::I_exp, typename U2::I_exp>,
+        detail::fraction_subtract_t<typename U1::R_exp, typename U2::R_exp>,
+        detail::combine_dim_tag_t<typename U1::L_exp,
+            detail::fraction_negate_t<typename U2::L_exp>, typename U1::L_tag,
+            typename U2::L_tag, detail::LengthMixedTag>,
+        detail::combine_dim_tag_t<typename U1::M_exp,
+            detail::fraction_negate_t<typename U2::M_exp>, typename U1::M_tag,
+            typename U2::M_tag, detail::MassMixedTag>,
+        detail::combine_dim_tag_t<typename U1::T_exp,
+            detail::fraction_negate_t<typename U2::T_exp>, typename U1::T_tag,
+            typename U2::T_tag, detail::TimeMixedTag>,
+        detail::combine_dim_tag_t<typename U1::I_exp,
+            detail::fraction_negate_t<typename U2::I_exp>, typename U1::I_tag,
+            typename U2::I_tag, detail::CurrentMixedTag>,
+        detail::combine_dim_tag_t<typename U1::R_exp,
+            detail::fraction_negate_t<typename U2::R_exp>, typename U1::R_tag,
+            typename U2::R_tag, detail::AngleMixedTag>>;
 
 /* Base Unit Aliases */
-using scalar_t = Unit<std::ratio<1>>;
-using meter_t = Unit<std::ratio<1>, std::ratio<1>>;
-using foot_t = Unit<std::ratio<3048, 10000>, std::ratio<1>>;
-using inch_t = Unit<std::ratio<254, 10000>, std::ratio<1>>;
-using kg_t = Unit<std::ratio<1>, std::ratio<0>, std::ratio<1>>;
-using pound_t =
-    Unit<std::ratio<4535924, 10000000>, std::ratio<0>, std::ratio<1>>;
-using second_t =
-    Unit<std::ratio<1>, std::ratio<0>, std::ratio<0>, std::ratio<1>>;
+using scalar_t = Unit<detail::Fraction<1>>;
+using meter_t = Unit<detail::Fraction<1>, detail::Fraction<1>>;
+using foot_t = Unit<detail::Fraction<3048, 10000>, detail::Fraction<1>,
+    detail::Fraction<0>, detail::Fraction<0>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::LengthFootTag>;
+using inch_t = Unit<detail::Fraction<254, 10000>, detail::Fraction<1>,
+    detail::Fraction<0>, detail::Fraction<0>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::LengthInchTag>;
+using kg_t =
+    Unit<detail::Fraction<1>, detail::Fraction<0>, detail::Fraction<1>>;
+using pound_t = Unit<detail::Fraction<4535924, 10000000>, detail::Fraction<0>,
+    detail::Fraction<1>, detail::Fraction<0>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::LengthMetricTag, detail::MassPoundTag>;
+using second_t = Unit<detail::Fraction<1>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::Fraction<1>>;
 using minute_t =
-    Unit<std::ratio<60>, std::ratio<0>, std::ratio<0>, std::ratio<1>>;
-using ms_t =
-    Unit<std::ratio<1, 1000>, std::ratio<0>, std::ratio<0>, std::ratio<1>>;
-using amp_t = Unit<std::ratio<1>, std::ratio<0>, std::ratio<0>, std::ratio<0>,
-    std::ratio<1>>;
-using radian_t = Unit<std::ratio<1>, std::ratio<0>, std::ratio<0>,
-    std::ratio<0>, std::ratio<0>, std::ratio<1>>;
-using degree_t = Unit<std::ratio<1745329, 100000000>, std::ratio<0>,
-    std::ratio<0>, std::ratio<0>, std::ratio<0>, std::ratio<1>>;
-using rotation_t = Unit<std::ratio<62832, 10000>, std::ratio<0>, std::ratio<0>,
-    std::ratio<0>, std::ratio<0>, std::ratio<1>>;
+    Unit<detail::Fraction<60>, detail::Fraction<0>, detail::Fraction<0>,
+        detail::Fraction<1>, detail::Fraction<0>, detail::Fraction<0>,
+        detail::LengthMetricTag, detail::MassMetricTag, detail::TimeMinuteTag>;
+using ms_t = Unit<detail::Fraction<1, 1000>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::Fraction<1>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::LengthMetricTag, detail::MassMetricTag,
+    detail::TimeMillisecondTag>;
+using amp_t = Unit<detail::Fraction<1>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::Fraction<0>, detail::Fraction<1>>;
+using radian_t =
+    Unit<detail::Fraction<1>, detail::Fraction<0>, detail::Fraction<0>,
+        detail::Fraction<0>, detail::Fraction<0>, detail::Fraction<1>>;
+using degree_t = Unit<detail::Fraction<1745329, 100000000>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::Fraction<0>, detail::Fraction<0>,
+    detail::Fraction<1>, detail::LengthMetricTag, detail::MassMetricTag,
+    detail::TimeSecondTag, detail::CurrentAmpTag, detail::AngleDegreeTag>;
+using rotation_t = Unit<detail::Fraction<62832, 10000>, detail::Fraction<0>,
+    detail::Fraction<0>, detail::Fraction<0>, detail::Fraction<0>,
+    detail::Fraction<1>, detail::LengthMetricTag, detail::MassMetricTag,
+    detail::TimeSecondTag, detail::CurrentAmpTag, detail::AngleRotationTag>;
 
 // Derived Unit Aliases
 using mps_t = UnitDivision<meter_t, second_t>;
@@ -228,61 +710,97 @@ using degps2_t = UnitDivision<degps_t, second_t>;
 
 // Absolute value
 template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R>
-static inline Unit<Fac, L, M, T, I, R> u_abs(
-    const Unit<Fac, L, M, T, I, R> &u) {
-  return Unit<Fac, L, M, T, I, R>(std::abs(u.value()));
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+static inline Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_abs(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u) {
+  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+      std::abs(u.to_base()));
 }
 
 // Power operation
-template <typename Fac, typename L, typename M, typename T, typename I>
-constexpr auto u_pow(const Unit<Fac, L, M, T, I> &u, double exp) {
-  return Unit<Fac, L, M, T, I>(std::pow(u.value(), exp));
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+constexpr auto u_pow(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u,
+    double exp) {
+  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+      std::pow(u.to_base(), exp));
 }
 
 // Copysign
 template <typename U1, typename U2> constexpr auto u_copysign(U1 u, U2 sign) {
   static_assert(
-      std::is_base_of_v<
+      std::is_base_of<
           Unit<typename U1::Fac_, typename U1::L_exp, typename U1::M_exp,
-              typename U1::T_exp, typename U1::I_exp, typename U1::R_exp>,
-          U1> &&
-      std::is_base_of_v<
+              typename U1::T_exp, typename U1::I_exp, typename U1::R_exp,
+              typename U1::L_tag, typename U1::M_tag, typename U1::T_tag,
+              typename U1::I_tag, typename U1::R_tag>,
+          U1>::value,
+      "u_copysign requires the first argument to be a pdcsu::units::Unit "
+      "type.");
+  static_assert(
+      std::is_base_of<
           Unit<typename U2::Fac_, typename U2::L_exp, typename U2::M_exp,
-              typename U2::T_exp, typename U2::I_exp, typename U2::R_exp>,
-          U2>);
+              typename U2::T_exp, typename U2::I_exp, typename U2::R_exp,
+              typename U2::L_tag, typename U2::M_tag, typename U2::T_tag,
+              typename U2::I_tag, typename U2::R_tag>,
+          U2>::value,
+      "u_copysign requires the second argument to be a pdcsu::units::Unit "
+      "type.");
   return Unit<typename U1::Fac_, typename U1::L_exp, typename U1::M_exp,
-      typename U1::T_exp, typename U1::I_exp, typename U1::R_exp>(
+      typename U1::T_exp, typename U1::I_exp, typename U1::R_exp,
+      typename U1::L_tag, typename U1::M_tag, typename U1::T_tag,
+      typename U1::I_tag, typename U1::R_tag>(
       std::copysign(u.value(), sign.value()));
 }
 template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R>
-auto u_copysign(const Unit<Fac, L, M, T, I, R> &u, double sign) {
-  return Unit<Fac, L, M, T, I, R>(std::copysign(u.value(), sign));
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+auto u_copysign(const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u,
+    double sign) {
+  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+      std::copysign(u.to_base(), sign));
 }
 
 // Clamp
 template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R>
-Unit<Fac, L, M, T, I, R> u_clamp(const Unit<Fac, L, M, T, I, R> &u,
-    const Unit<Fac, L, M, T, I, R> &min, const Unit<Fac, L, M, T, I, R> &max) {
-  return Unit<Fac, L, M, T, I, R>(
-      std::clamp(u.value(), min.value(), max.value()));
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_clamp(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u,
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &min,
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &max) {
+  auto base = u.to_base();
+  const auto min_base = min.to_base();
+  const auto max_base = max.to_base();
+  if (base < min_base) {
+    base = min_base;
+  } else if (base > max_base) {
+    base = max_base;
+  }
+  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+      base);
 }
 
 // Min/Max
 template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R>
-constexpr Unit<Fac, L, M, T, I, R> u_min(
-    const Unit<Fac, L, M, T, I, R> &a, const Unit<Fac, L, M, T, I, R> &b) {
-  return (a.value() < b.value()) ? a : b;
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+constexpr Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_min(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &a,
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &b) {
+  return (a.to_base() < b.to_base()) ? a : b;
 }
 
 template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R>
-constexpr Unit<Fac, L, M, T, I, R> u_max(
-    const Unit<Fac, L, M, T, I, R> &a, const Unit<Fac, L, M, T, I, R> &b) {
-  return (a.value() > b.value()) ? a : b;
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+constexpr Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_max(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &a,
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &b) {
+  return (a.to_base() > b.to_base()) ? a : b;
 }
 
 // Trigonometric functions
