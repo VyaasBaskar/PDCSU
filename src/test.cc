@@ -17,17 +17,9 @@ int main() {
   DefBLDC def_bldc(105_u_A, 1.8_u_A, 2.5_u_Nm, 5676_u_rpm);
   DefLinearSys def_sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 0.0_u_mps2,
       3_u_kg, 22_u_N, 0.5_u_N / 5676_u_rpm, 20_u_ms, 0_u_ohm);
-  DefLinearSys sys2 = def_sys;
-  sys2.inertia *= 5.0;
-
-  std::cout << sys2.inertia.value() << " kgm2\n";
-  std::cout << "K" << def_sys.inertia.value() << " kgm2\n" << std::endl;
-
   amp_t clim = 40_u_A;   
 
-  amp_t qq = 10_u_m * 10_u_kg;
-
-  ICNORPositionControl icnor(sys2);
+  ICNORPositionControl icnor(def_sys);
   icnor.setProjectionHorizon(3);
 
   SimBLDC simBldc = SimBLDC(def_sys);

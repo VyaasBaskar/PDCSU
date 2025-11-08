@@ -112,7 +112,6 @@ struct gclass {
     bool valid = (cross_count >= min_crossings);
     if (!valid) return {false, -1, -1};
 
-    // clamp indices into valid range and return
     first_idx = std::max(0, first_idx);
     last_idx = std::min(n - 1, last_idx == -1 ? first_idx : last_idx);
     return {true, first_idx, last_idx};

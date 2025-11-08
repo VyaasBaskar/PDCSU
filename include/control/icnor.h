@@ -56,58 +56,98 @@ private:
     invZ4 = invZ3 * invZ;
   }
 
-  // Computes the maximum control target ICNOR attempts to apply
-  inline double max_control_target(double t) {
-    double vmax_ = fabs(zeta);
-    if (vmax_ > v_max + tolerance) return vmax_;
+  struct ControlEvalContext {
+    double t;
+    double t2;
+    double t3;
+    double tmid;
+    double tmid2;
+    double tmid3;
+    double max_allow;
+  };
 
-    double t2 = t * t;
-    double t3 = t2 * t;
-    double end_val = fabs(zeta + alpha * t + beta * t2 + gamma * t3);
-    if (end_val > v_max + tolerance) return end_val;
+  inline ControlEvalContext make_control_eval_context(double t,
+      double max_allow) const {
+    const double t2 = t * t;
+    const double t3 = t2 * t;
+    const double tmid = 0.5 * t;
+    const double tmid2 = tmid * tmid;
+    return ControlEvalContext{
+        t, t2, t3, tmid, tmid2, tmid2 * tmid, max_allow};
+  }
+
+  // Computes the maximum control target ICNOR attempts to apply
+  inline double max_control_target(const ControlEvalContext &ctx) const {
+    double vmax_ = fabs(zeta);
+    if (vmax_ > ctx.max_allow) return vmax_;
+
+    double end_val =
+        fabs(zeta + alpha * ctx.t + beta * ctx.t2 + gamma * ctx.t3);
+    if (end_val > ctx.max_allow) return end_val;
     vmax_ = std::max(vmax_, end_val);
 
-    double tmid = t / 2.0;
-    double tmid2 = tmid * tmid;
-    double tmid3 = tmid2 * tmid;
-    double mid_val = fabs(zeta + alpha * tmid + beta * tmid2 + gamma * tmid3);
-    if (mid_val > v_max + tolerance) return mid_val;
+    double mid_val = fabs(zeta + alpha * ctx.tmid + beta * ctx.tmid2 +
+                          gamma * ctx.tmid3);
+    if (mid_val > ctx.max_allow) return mid_val;
     vmax_ = std::max(vmax_, mid_val);
 
     return vmax_;
   }
 
+  struct SolveContext {
+    double M00;
+    double M01;
+    double M10;
+    double M11;
+    double det;
+    double rhs0_const;
+    double rhs0_beta;
+    double rhs0_gamma;
+    double rhs1_const;
+    double rhs1_beta;
+    double rhs1_gamma;
+  };
+
+  inline SolveContext make_solve_context(double t) const {
+    const double t2 = t * t;
+    const double t3 = t2 * t;
+    const double t4 = t3 * t;
+    const double K = exp(-Z * t);
+    const double one_minus_K = 1.0 - K;
+
+    SolveContext ctx{};
+    ctx.M00 = Z * t - 1.0 + K;
+    ctx.M01 = 0.5 * Z * t2 - t + one_minus_K * invZ;
+    ctx.M10 = one_minus_K;
+    ctx.M11 = t + invZ * (K - 1.0);
+    ctx.det = ctx.M00 * ctx.M11 - ctx.M01 * ctx.M10;
+
+    ctx.rhs0_const = Z * (T - x0) - v0 * one_minus_K;
+    ctx.rhs0_beta =
+        (t3 * Z / 3.0) + 2.0 * t2 + 2.0 * t * invZ + 2.0 * invZ2 * one_minus_K;
+    ctx.rhs0_gamma = (-Z * t4 / 4.0) - t3 + 3.0 * t2 * invZ +
+                     6.0 * t * invZ2 + 6.0 * invZ3 * one_minus_K;
+
+    ctx.rhs1_const = P - v0 * K;
+    ctx.rhs1_beta =
+        -t2 - 2.0 * t * invZ - 2.0 * invZ2 + 2.0 * K * invZ2;
+    ctx.rhs1_gamma = -t3 - 3.0 * t2 * invZ - 6.0 * t * invZ2 +
+                     6.0 * invZ3 - 6.0 * K * invZ3;
+    return ctx;
+  }
+
   // Solves for zeta and alpha, given beta and gamma
   inline std::optional<std::pair<double, double>> solve_zeta_alpha(
-      double beta, double gamma, double t) {
-    double t2 = t * t;
-    double t3 = t2 * t;
-    double t4 = t3 * t;
+      double beta, double gamma, const SolveContext &ctx) {
+    if (fabs(ctx.det) < tolerance) return std::nullopt;
 
-    double K = exp(-Z * t);
+    double rhs0 =
+        ctx.rhs0_const + beta * ctx.rhs0_beta + gamma * ctx.rhs0_gamma;
+    double rhs1 =
+        ctx.rhs1_const + beta * ctx.rhs1_beta + gamma * ctx.rhs1_gamma;
 
-    double M00 = Z * t - 1.0 + K;
-    double M01 = 0.5 * Z * t2 - t + (1.0 - K) * invZ;
-    double rhs0 = Z * (T - (gamma * t4) / 4.0 - x0) +
-                  (t3 * (beta * Z - 3.0 * gamma)) / 3.0 + 2.0 * beta * t2 +
-                  3.0 * gamma * t2 * invZ + 2.0 * beta * t * invZ +
-                  6.0 * gamma * t * invZ2 - v0 * (1.0 - K) +
-                  2.0 * beta * invZ2 * (1.0 - K) +
-                  6.0 * gamma * invZ3 * (1.0 - K);
-
-    double M10 = 1.0 - K;
-    double M11 = t + invZ * (K - 1.0);
-
-    double rhs1 = P - beta * t2 - gamma * t3 - 2.0 * beta * t * invZ -
-                  3.0 * gamma * t2 * invZ - 2.0 * beta * invZ2 -
-                  6.0 * gamma * t * invZ2 + 6.0 * gamma * invZ3 - v0 * K +
-                  2.0 * beta * K * invZ2 - 6.0 * gamma * K * invZ3;
-
-    double det = M00 * M11 - M01 * M10;
-    if (fabs(det) < tolerance) return std::nullopt;
-
-    zeta = (rhs0 * M11 - M01 * rhs1) / det;
-    alpha = (M00 * rhs1 - rhs0 * M10) / det;
+    zeta = (rhs0 * ctx.M11 - ctx.M01 * rhs1) / ctx.det;
+    alpha = (ctx.M00 * rhs1 - rhs0 * ctx.M10) / ctx.det;
     return std::make_pair(zeta, alpha);
   }
 
@@ -122,42 +162,83 @@ private:
     double best_b_real = 0.0;
     double min_b_abs = std::numeric_limits<double>::max();
 
-    for (int i = 0; i <= coarse_steps; ++i) {
+    const SolveContext ctx = make_solve_context(t);
+    if (fabs(ctx.det) < tolerance) return std::nullopt;
+
+    const double coarse_sign =
+        -std::copysign(1.0, T - x0 - 10.0 * v0 / v_max);
+    const double max_allow = v_max + 2.0;
+    const ControlEvalContext control_ctx =
+        make_control_eval_context(t, max_allow);
+
+    constexpr double kBestAbsGoal = 1e-6;
+
+    bool coarse_done = false;
+    for (int i = 0; i <= coarse_steps && !coarse_done; ++i) {
       double b = b_range * i / coarse_steps;
       double g = 0.5 * b;
-      double b_real = b * -std::copysign(1.0, T - x0 - 10.0 * v0 / v_max);
-      double g_real = g * -std::copysign(1.0, T - x0 - 10.0 * v0 / v_max);
-      auto sol = solve_zeta_alpha(b_real, g_real, t);
+      double b_real = b * coarse_sign;
+      double g_real = g * coarse_sign;
+      auto sol = solve_zeta_alpha(b_real, g_real, ctx);
       if (!sol) continue;
       auto [z, a] = *sol;
-      if (max_control_target(t) <= v_max + 2.0) {
-        double b_abs = std::abs(b_real);
+      if (max_control_target(control_ctx) <= max_allow) {
+        double b_abs = std::fabs(b_real);
         if (b_abs < min_b_abs) {
           min_b_abs = b_abs;
           best_b_real = b_real;
           best_sol = std::make_tuple(z, a, b_real, g_real);
+          if (b_abs <= kBestAbsGoal) { return best_sol; }
+          if (b_abs == b) {
+            coarse_done = true;
+          }
         }
       }
     }
 
     if (min_b_abs < std::numeric_limits<double>::max()) {
       double fine_b_range = b_range / coarse_steps;
-      for (int i = -fine_steps; i <= fine_steps; ++i) {
-        for (int sign : {-1, 1}) {
-          double b = (best_b_real / -std::copysign(1.0, T - x0)) +
-                     sign * i * fine_b_range / fine_steps;
+      const double fine_sign = -std::copysign(1.0, T - x0);
+      const double base_b = best_b_real / fine_sign;
+      const double fine_step = fine_b_range / fine_steps;
+      int max_offset = fine_steps;
+      double base_abs = std::fabs(base_b);
+      double search_limit = base_abs + min_b_abs;
+      if (fine_step > 0.0) {
+        max_offset =
+            std::min(fine_steps,
+                static_cast<int>(std::ceil(search_limit / fine_step)));
+      }
+      bool finished = false;
+      for (int i = -max_offset; i <= max_offset && !finished; ++i) {
+        if (i != 0) {
+          double delta = std::fabs(i * fine_step);
+          double min_possible =
+              std::fabs(std::fabs(base_b) - delta);
+          if (min_possible >= min_b_abs - 1e-15) {
+            continue;
+          }
+        }
+        const int sign_count = (i == 0) ? 1 : 2;
+        for (int idx = 0; idx < sign_count; ++idx) {
+          int sign = (idx == 0) ? 1 : -1;
+          double b = base_b + sign * i * fine_step;
           double g = 0.5 * b;
-          double b_real = b * -std::copysign(1.0, T - x0);
-          double g_real = g * -std::copysign(1.0, T - x0);
-          auto sol = solve_zeta_alpha(b_real, g_real, t);
+          double b_real = b * fine_sign;
+          double g_real = g * fine_sign;
+          auto sol = solve_zeta_alpha(b_real, g_real, ctx);
           if (!sol) continue;
           auto [z, a] = *sol;
-          if (max_control_target(t) <= v_max + 2.0) {
-            double b_abs = std::abs(b_real);
+          if (max_control_target(control_ctx) <= max_allow) {
+            double b_abs = std::fabs(b_real);
             if (b_abs < min_b_abs) {
               min_b_abs = b_abs;
               best_b_real = b_real;
               best_sol = std::make_tuple(z, a, b_real, g_real);
+              if (b_abs <= kBestAbsGoal) {
+                finished = true;
+                break;
+              }
             }
           }
         }
