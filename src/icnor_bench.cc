@@ -1,6 +1,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -75,6 +76,11 @@ Scenario make_high_damping() {
 }  // namespace
 
 int main() {
+  // Ensure output is not buffered
+  std::cout.setf(std::ios::unitbuf);
+  
+  std::cout << "Initializing ICNOR benchmark scenarios..." << std::endl;
+  
   std::vector<Scenario> scenarios;
   scenarios.reserve(5);
   scenarios.push_back(make_baseline());
@@ -83,108 +89,126 @@ int main() {
   scenarios.push_back(make_dual_motor());
   scenarios.push_back(make_high_damping());
 
+  std::cout << "Running " << scenarios.size() << " scenarios..." << std::endl;
+  
   bool all_quality_good = true;
 
   std::cout << std::fixed << std::setprecision(3);
 
   for (auto &scenario : scenarios) {
-    ICNORPositionControl icnor(scenario.sys);
-    icnor.setProjectionHorizon(4);
-    icnor.setConstraints(scenario.speed_limit, scenario.current_limit);
-    icnor.setTolerance(scenario.sys.toNative(scenario.tol_inner_real),
-        scenario.sys.toNative(scenario.tol_outer_real));
+    std::cout << "\n=== " << scenario.name << " ===" << std::endl;
+    
+    try {
+      ICNORPositionControl icnor(scenario.sys);
+      icnor.setProjectionHorizon(4);
+      icnor.setConstraints(scenario.speed_limit, scenario.current_limit);
+      icnor.setTolerance(scenario.sys.toNative(scenario.tol_inner_real),
+          scenario.sys.toNative(scenario.tol_outer_real));
+      
+      auto learner =
+          std::make_shared<ICNORLearner>("icnor_history_" + scenario.name);
+      learner->setAutoSaveStride(5);
+      icnor.attachLearner(learner);
 
-    SimBLDC sim(scenario.sys);
-    sim.SetCurrentLimit(scenario.current_limit);
-    sim.SetLoad(scenario.extra_load);
+      SimBLDC sim(scenario.sys);
+      sim.SetCurrentLimit(scenario.current_limit);
+      sim.SetLoad(scenario.extra_load);
+      auto target_native = scenario.sys.toNative(scenario.target_real);
+      radps_t zero_velocity = 0_u_radps;
 
-    auto target_native = scenario.sys.toNative(scenario.target_real);
-    radps_t zero_velocity = 0_u_radps;
+      auto control_period = scenario.sys.control_period;
+      int max_steps = scenario.max_steps;
+      double target_real_value = scenario.target_real.value();
+      double settle_pos_tol = scenario.settle_pos_tol.value();
+      double settle_vel_tol = scenario.settle_vel_tol.value();
+      std::vector<double> time_samples;
+      std::vector<double> pos_samples;
+      std::vector<double> vel_samples;
+      time_samples.reserve(max_steps);
+      pos_samples.reserve(max_steps);
+      vel_samples.reserve(max_steps);
 
-    auto control_period = scenario.sys.control_period;
-    int max_steps = scenario.max_steps;
-    double target_real_value = scenario.target_real.value();
-    double settle_pos_tol = scenario.settle_pos_tol.value();
-    double settle_vel_tol = scenario.settle_vel_tol.value();
-    std::vector<double> time_samples;
-    std::vector<double> pos_samples;
-    std::vector<double> vel_samples;
-    time_samples.reserve(max_steps);
-    pos_samples.reserve(max_steps);
-    vel_samples.reserve(max_steps);
+      double accumulated_ns = 0.0;
+      int calls = 0;
+      int settle_counter = 0;
 
-    double accumulated_ns = 0.0;
-    int calls = 0;
-    int settle_counter = 0;
+      for (int step = 0;
+           step < max_steps && settle_counter < scenario.settle_window; ++step) {
+        auto t_start = std::chrono::steady_clock::now();
+        double duty_cycle = icnor.getOutput(
+            target_native, zero_velocity, sim.getPosition(), sim.getVelocity());
+        auto t_end = std::chrono::steady_clock::now();
 
-    for (int step = 0;
-         step < max_steps && settle_counter < scenario.settle_window; ++step) {
-      auto t_start = std::chrono::steady_clock::now();
-      double duty_cycle = icnor.getOutput(
-          target_native, zero_velocity, sim.getPosition(), sim.getVelocity());
-      auto t_end = std::chrono::steady_clock::now();
+        accumulated_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                              t_end - t_start)
+                              .count();
+        ++calls;
 
-      accumulated_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(
-                            t_end - t_start)
-                            .count();
-      ++calls;
+        sim.setControlTarget(duty_cycle);
+        sim.Tick(control_period);
 
-      sim.setControlTarget(duty_cycle);
-      sim.Tick(control_period);
+        double time_sec = step * control_period.value() / 1000.0;
+        double pos_real = scenario.sys.toReal(sim.getPosition()).value();
+        double vel_real = scenario.sys.toReal(sim.getVelocity()).value();
+        double vel_for_eval = std::max(vel_real, 0.0);
 
-      double time_sec = step * control_period.value() / 1000.0;
-      double pos_real = scenario.sys.toReal(sim.getPosition()).value();
-      double vel_real = scenario.sys.toReal(sim.getVelocity()).value();
-      double vel_for_eval = std::max(vel_real, 0.0);
+        time_samples.push_back(time_sec);
+        pos_samples.push_back(pos_real);
+        vel_samples.push_back(vel_for_eval);
 
-      time_samples.push_back(time_sec);
-      pos_samples.push_back(pos_real);
-      vel_samples.push_back(vel_for_eval);
-
-      double pos_error = std::abs(pos_real - target_real_value);
-      double vel_mag = std::abs(vel_real);
-      if (pos_error <= settle_pos_tol && vel_mag <= settle_vel_tol) {
-        ++settle_counter;
-      } else {
-        settle_counter = 0;
+        double pos_error = std::abs(pos_real - target_real_value);
+        double vel_mag = std::abs(vel_real);
+        if (pos_error <= settle_pos_tol && vel_mag <= settle_vel_tol) {
+          ++settle_counter;
+        } else {
+          settle_counter = 0;
+        }
       }
-    }
 
-    if (!time_samples.empty()) {
-      const int pad_samples = 40;
-      double time_increment = control_period.value() / 1000.0;
-      double last_time = time_samples.back();
-      double last_pos = pos_samples.back();
-      for (int i = 1; i <= pad_samples; ++i) {
-        time_samples.push_back(last_time + i * time_increment);
-        pos_samples.push_back(last_pos);
-        vel_samples.push_back(0.0);
+      if (!time_samples.empty()) {
+        const int pad_samples = 40;
+        double time_increment = control_period.value() / 1000.0;
+        double last_time = time_samples.back();
+        double last_pos = pos_samples.back();
+        for (int i = 1; i <= pad_samples; ++i) {
+          time_samples.push_back(last_time + i * time_increment);
+          pos_samples.push_back(last_pos);
+          vel_samples.push_back(0.0);
+        }
       }
+
+      auto [quality, behavior] =
+          gclass::classify_trace(time_samples, pos_samples, vel_samples);
+      bool pass_quality = (quality == "great" || quality == "good");
+      if (!pass_quality) all_quality_good = false;
+
+      double avg_ns = (calls > 0) ? (accumulated_ns / calls) : 0.0;
+
+      double final_pos = pos_samples.empty() ? 0.0 : pos_samples.back();
+      double final_vel = vel_samples.empty() ? 0.0 : vel_samples.back();
+
+      learner->saveIfDirty();
+
+      std::cout << "[" << scenario.name << "] "
+                << "avg getOutput: " << avg_ns << " ns, "
+                << "final pos: " << final_pos << " m, "
+                << "final vel: " << final_vel << " m/s, "
+                << "quality: " << quality << ", behavior: " << behavior << std::endl;
+    } catch (const std::exception& e) {
+      std::cerr << "ERROR in scenario " << scenario.name << ": " << e.what() << std::endl;
+      all_quality_good = false;
+    } catch (...) {
+      std::cerr << "UNKNOWN ERROR in scenario " << scenario.name << std::endl;
+      all_quality_good = false;
     }
-
-    auto [quality, behavior] =
-        gclass::classify_trace(time_samples, pos_samples, vel_samples);
-    bool pass_quality = (quality == "great" || quality == "good");
-    if (!pass_quality) all_quality_good = false;
-
-    double avg_ns = (calls > 0) ? (accumulated_ns / calls) : 0.0;
-
-    double final_pos = pos_samples.empty() ? 0.0 : pos_samples.back();
-    double final_vel = vel_samples.empty() ? 0.0 : vel_samples.back();
-
-    std::cout << "[" << scenario.name << "] "
-              << "avg getOutput: " << avg_ns << " ns, "
-              << "final pos: " << final_pos << " m, "
-              << "final vel: " << final_vel << " m/s, "
-              << "quality: " << quality << ", behavior: " << behavior << "\n";
   }
 
   if (!all_quality_good) {
-    std::cerr << "ICNOR quality check failed for one or more scenarios.\n";
+    std::cerr << "ICNOR quality check failed for one or more scenarios." << std::endl;
     return 1;
   }
 
-  std::cout << "All scenarios passed quality requirements.\n";
+  std::cout << "All scenarios passed quality requirements." << std::endl;
   return 0;
 }
 
