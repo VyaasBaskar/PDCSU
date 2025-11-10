@@ -70,6 +70,8 @@ private:
       ohm_t circuit_res = 0_u_ohm) {
     auto loadfn = [mass, effective_gravity, gear_ratio, num_motors](
                       radian_t theta, radps_t omega) -> nm_t {
+      (void)theta;
+      (void)omega;
       return nm_t(
           mass * effective_gravity * 1_u_rad / (gear_ratio * num_motors));
     };

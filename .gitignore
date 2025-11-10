@@ -1,3 +1,8 @@
+# Project specific
+sim_data.csv
+results/
+.cache/
+
 # Prerequisites
 *.d
 

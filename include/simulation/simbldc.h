@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 
 #include "util/sysdef.h"
@@ -66,11 +67,41 @@ public:
 
     nm_t viscous = plant.viscous_damping * vel;
     nm_t load_func = plant.load_function(pos, vel);
-    nm_t friction =
-        1_u_Nm * std::min(std::abs(plant.friction.value()),
-                     std::abs((load_func + viscous).value() +
-                              DC * plant.def_bldc.stall_torque.value()));
-    friction = u_copysign(nm_t(friction), vel);
+    const double applied_dc = std::clamp(DC, -1.0, 1.0);
+
+    nm_t ext_torque = load_func + viscous + load;
+    nm_t motor_torque_guess = plant.def_bldc.stall_torque * applied_dc;
+    nm_t drive_balance = motor_torque_guess - ext_torque;
+
+    const radps_t speed = u_abs(vel);
+    const radps_t stick_velocity = 1e-3_u_radps;
+    const radps_t slip_velocity = 5e-2_u_radps;
+
+    nm_t static_limit = plant.friction * 1.05;
+    nm_t dynamic_limit = plant.friction;
+    nm_t friction = 0_u_Nm;
+
+    if (speed < stick_velocity) {
+      const double balance_abs = std::abs(drive_balance.value());
+      const double static_limit_value = static_limit.value();
+
+      if (balance_abs <= static_limit_value) {
+        friction = -drive_balance;
+      } else {
+        double direction_source =
+            (std::abs(vel.value()) > 1e-9) ? vel.value() : drive_balance.value();
+        if (direction_source == 0.0) {
+          direction_source = 1.0;
+        }
+        friction = dynamic_limit * -std::copysign(1.0, direction_source);
+      }
+    } else {
+      double blend = std::tanh((speed / slip_velocity).value());
+      blend = std::clamp(blend, 0.0, 1.0);
+      nm_t blended_mag = static_limit * (1.0 - blend) + dynamic_limit * blend;
+      friction = -u_copysign(blended_mag, vel.value());
+    }
+
     nm_t inh_load = load_func + viscous + friction;
 
     vel = SimHelper::predict_velocity(dt, v0, DC, I_lim, inh_load + load,

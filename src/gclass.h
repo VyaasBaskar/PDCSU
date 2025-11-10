@@ -65,6 +65,7 @@ struct gclass {
       const std::vector<double>& pos, double target, double error_frac = 0.10,
       int min_crossings = 2, int min_samples_between = 2,
       double close_radius_mult = 3.0) {
+    (void)time;
     int n = (int)velocity.size();
     if (n < 3 || (int)pos.size() != n) return {false, -1, -1};
 
