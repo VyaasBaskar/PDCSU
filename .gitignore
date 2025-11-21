@@ -2,6 +2,7 @@
 sim_data.csv
 results/
 .cache/
+build/
 
 # Prerequisites
 *.d
