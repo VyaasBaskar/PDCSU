@@ -24,19 +24,20 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 
 set "release_temp=build\%release_zip%_tmp"
 set "zip_dest=build\%release_zip%.zip"
+set "release_folder=%release_zip%"
 
 if exist "%release_temp%" rd /s /q "%release_temp%"
 mkdir "%release_temp%"
-mkdir "%release_temp%\%release_tag%"
+mkdir "%release_temp%\%release_folder%"
 
 %PS% "Write-Host 'Copying include/ tree for release packaging...' -ForegroundColor Green"
-robocopy include "%release_temp%\%release_tag%" /E /NFL /NDL /NJH /NJS /NC /NS /NP >nul
+robocopy include "%release_temp%\%release_folder%" /E /NFL /NDL /NJH /NJS /NC /NS /NP >nul
 if %errorlevel% geq 8 exit /b %errorlevel%
 
-copy /Y build\pdcsu.pch "%release_temp%\%release_tag%\pdcsu.pch" >nul
+copy /Y build\pdcsu.pch "%release_temp%\%release_folder%\pdcsu.pch" >nul
 
-%PS% "Write-Host 'Creating archive %zip_dest% with release_tag=%release_tag%' -ForegroundColor Green"
-%PS% "Compress-Archive -Path \"%release_temp%\%release_tag%\" -DestinationPath \"%zip_dest%\" -Force"
+%PS% "Write-Host 'Creating archive %zip_dest% with release_folder=%release_folder%' -ForegroundColor Green"
+%PS% "Compress-Archive -Path \"%release_temp%\%release_folder%\" -DestinationPath \"%zip_dest%\" -Force"
 if %errorlevel% neq 0 (
   rd /s /q "%release_temp%"
   exit /b %errorlevel%
