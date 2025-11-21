@@ -43,36 +43,6 @@ if %errorlevel% neq 0 (
   exit /b %errorlevel%
 )
 
-%PS% "Write-Host 'Merging %current_branch% into dev...' -ForegroundColor Green"
-git fetch origin dev
-if %errorlevel% neq 0 (
-  %PS% "Write-Host 'Failed to fetch origin/dev.' -ForegroundColor Red"
-  exit /b %errorlevel%
-)
-
-git checkout dev 2>nul || git checkout -b dev origin/dev
-if %errorlevel% neq 0 (
-  %PS% "Write-Host 'Unable to checkout dev branch.' -ForegroundColor Red"
-  exit /b %errorlevel%
-)
-
-git merge "%current_branch%" --no-ff -m "[PDCSU Auto-deploy] Merge %current_branch% into dev"
-if %errorlevel% neq 0 (
-  %PS% "Write-Host 'Merge into dev failed.' -ForegroundColor Red"
-  git merge --abort >nul 2>&1
-  git checkout "%current_branch%"
-  exit /b %errorlevel%
-)
-
-git push origin dev
-if %errorlevel% neq 0 (
-  %PS% "Write-Host 'git push dev failed.' -ForegroundColor Red"
-  git checkout "%current_branch%"
-  exit /b %errorlevel%
-)
-
-git checkout "%current_branch%"
-
 if not exist "build\%release_zip%.zip" (
   %PS% "Write-Host 'Release archive missing: build\%release_zip%.zip' -ForegroundColor Red"
   exit /b 1
