@@ -490,7 +490,7 @@ ICNORLearner::deriveTuningLocked(
       std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
       std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
   if (applyNewtonAdjustment(time_scale_metric, 0.8, 0.04,
-          params.time_scale_factor, 0.4, 2.6, 0.25, time_scale_stability, 0.05)) {
+          params.time_scale_factor, 0.4, 2.6, 0.15, time_scale_stability, 0.08)) {
     changed = true;
   }
 
@@ -504,7 +504,7 @@ ICNORLearner::deriveTuningLocked(
       std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
       std::clamp(ema_settled_fraction_ + 0.05, 0.0, 1.0);
   if (applyNewtonAdjustment(offset_metric, -0.6, 0.04,
-          params.time_offset, -0.5, 1.5, 0.25, offset_stability, 0.05)) {
+          params.time_offset, -0.5, 1.5, 0.15, offset_stability, 0.08)) {
     changed = true;
   }
 
@@ -512,61 +512,61 @@ ICNORLearner::deriveTuningLocked(
       std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
       std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
       std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
+  double overshoot_penalty = 0.9 * std::max(overshoot_metric, 0.0);
+  z_confidence = std::clamp(z_confidence + 0.1 * overshoot_penalty, 0.0, 1.0);
   double z_metric =
       0.5 * ema_peak_error_ +
-      0.4 * overshoot_metric +
-      0.2 * oscillation_metric;
+      0.2 * oscillation_metric -
+      overshoot_penalty;
   if (applyNewtonAdjustment(z_metric,
           std::max(0.2, ema_control_ratio_ + 0.2), 0.15, params.z_fudge, 0.3,
-          3.0, 0.3, z_confidence, 0.05)) {
+          3.0, 0.15, z_confidence, 0.08)) {
     changed = true;
   }
 
-  double desired_control_ratio = 0.6;
-  double velocity_term =
-      std::clamp(ema_vel_error_ / std::max(0.02, ema_distance_travelled_ + 1e-3),
-          -1.5, 1.5);
+  double velocity_error_norm = std::clamp(
+      ema_vel_error_ / std::max(0.01, ema_distance_travelled_ + 1e-3), -2.0, 2.0);
   double load_scale_confidence =
-      std::clamp(ema_distance_travelled_ / 0.03, 0.0, 1.0) *
+      std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
       std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_ + 0.03, 0.0, 1.0);
-  double still_velocity_term =
-      std::clamp((ema_initial_velocity_abs_ - 0.012) / 0.025, -1.5, 1.5);
+      std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
   double load_scale_metric =
-      (ema_control_ratio_ - desired_control_ratio) +
-      0.4 * velocity_term +
+      0.6 * velocity_error_norm +
       0.3 * overshoot_metric +
-      0.35 * std::max(still_velocity_term, 0.0);
-  if (applyNewtonAdjustment(load_scale_metric, -0.9, 0.035, params.load_scale,
-          0.5, 2.0, 0.35, load_scale_confidence, 0.035)) {
+      0.1 * settling_time_metric;
+  if (applyNewtonAdjustment(load_scale_metric, 0.8, 0.05, params.load_scale,
+          0.5, 2.0, 0.15, load_scale_confidence, 0.08)) {
     changed = true;
   }
 
   double load_bias_confidence =
-      std::clamp(ema_distance_travelled_ / 0.02, 0.0, 1.0) *
+      std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
       std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_ + 0.03, 0.0, 1.0);
-  double distance_scale =
-      std::max(ema_distance_travelled_, 0.01);
-  double still_offset_term =
-      std::clamp(ema_initial_position_offset_ / 0.01, -2.0, 2.0);
-  double load_bias_metric =
-      (ema_pos_error_ / distance_scale) +
-      0.25 * settling_time_metric +
-      0.35 * still_offset_term;
-  if (applyNewtonAdjustment(load_bias_metric, -1.0, 0.01, params.load_bias,
-          -5.0, 5.0, 0.35, load_bias_confidence, 0.035)) {
-    changed = true;
+      std::clamp(ema_settled_fraction_, 0.3, 1.0);
+  double pos_error_abs = std::fabs(ema_pos_error_);
+  double vel_error_abs = std::fabs(ema_vel_error_);
+  if (load_bias_confidence >= 0.15 && pos_error_abs >= 0.001 && vel_error_abs <= 0.01) {
+    double load_bias_metric = -ema_pos_error_;
+    double bias_gain = std::max(ema_distance_travelled_ * 0.5, 0.05);
+    if (applyNewtonAdjustment(load_bias_metric, bias_gain, 0.01, params.load_bias,
+            -5.0, 5.0, 0.05, load_bias_confidence, 0.12)) {
+      changed = true;
+    }
   }
 
   double friction_confidence =
-      std::clamp(ema_distance_travelled_ / 0.02, 0.0, 1.0) *
+      std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
       std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_ + 0.15, 0.0, 1.0);
+      std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
+  double initial_vel_threshold = 0.015;
+  double friction_vel_term = std::clamp(
+      (ema_initial_velocity_abs_ - initial_vel_threshold) / 0.02, -2.0, 2.0);
   double friction_metric =
-      std::clamp(ema_initial_velocity_abs_ - 0.02, -0.5, 0.5);
-  if (applyNewtonAdjustment(friction_metric, -0.6, 0.01, params.friction_scale,
-          0.5, 2.0, 0.15, friction_confidence, 0.02)) {
+      0.6 * friction_vel_term +
+      0.3 * std::clamp(ema_oscillation_events_ - 0.5, -1.0, 1.0) +
+      0.1 * overshoot_metric;
+  if (applyNewtonAdjustment(friction_metric, 0.4, 0.03, params.friction_scale,
+          0.5, 2.0, 0.12, friction_confidence, 0.08)) {
     changed = true;
   }
 
@@ -597,7 +597,7 @@ inline bool ICNORLearner::applyNewtonAdjustment(double metric,
   if (!std::isfinite(metric) || !std::isfinite(derivative_hint)) return false;
   double bounded_metric_scale = std::max(metric_scale, 1e-6);
   double motion_factor =
-      1.0 - std::exp(-static_cast<double>(motion_count_) / 20.0);
+      1.0 - std::exp(-static_cast<double>(motion_count_) / 100.0);
   double magnitude_factor =
       1.0 - std::exp(-std::fabs(metric) / bounded_metric_scale);
   double stability = std::clamp(stability_factor, 0.0, 1.0);
@@ -1541,7 +1541,7 @@ public:
       icnor->setTargetAndState(T, P, x0, v0);
       icnor->optimize();
       const auto &tuning = icnor->getTuningParameters();
-      ffModel.setLoadAdjustments(tuning.load_scale, tuning.load_bias, tuning.friction_scale); // TODO: fix
+      ffModel.setLoadAdjustments(tuning.load_scale, 0.0, tuning.friction_scale); //tuning.load_bias, tuning.friction_scale);
       projected_output_ = icnor->getProjectedOutput(projection_horizon);
       projection = 0U;
       T_ = T;

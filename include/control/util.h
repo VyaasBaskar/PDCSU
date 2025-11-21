@@ -41,39 +41,17 @@ public:
     nm_t total_external = load + viscous_load;
     nm_t friction_load = 0.0_u_Nm;
 
-    const radps_t speed = u_abs(omega);
-    const radps_t stick_velocity = 1e-3 * base_plant.def_bldc.free_speed;
-    const radps_t slip_velocity = 5e-2 * base_plant.def_bldc.free_speed;
+    // const radps_t speed = u_abs(omega);
 
-    nm_t static_limit = base_plant.friction * friction_scale_ * 1.05;
-    nm_t dynamic_limit = base_plant.friction * friction_scale_;
-
-    if (speed >= stick_velocity || !cut) {
-      double direction_source =
-          (std::abs(omega.value()) > 1e-9) ? omega.value() : total_external.value();
-
-      if (direction_source != 0.0) {
-        double direction = -std::copysign(1.0, direction_source);
-
-        if (speed < stick_velocity) {
-          double support_mag = std::abs(total_external.value());
-          double static_mag = static_limit.value();
-          double applied_mag = std::min(static_mag, support_mag);
-          friction_load = nm_t(applied_mag * direction);
-        } else {
-          double blend = std::tanh((speed / slip_velocity).value());
-          blend = std::clamp(blend, 0.0, 1.0);
-          nm_t blended =
-              static_limit * (1.0 - blend) + dynamic_limit * blend;
-          friction_load = nm_t(blended.value() * direction);
-        }
-      }
+    if (!cut) {
+      friction_load = u_copysign(base_plant.friction * friction_scale_, omega);
     }
 
     nm_t total_load = total_external + friction_load;
-    double adjusted_nm =
-        total_load.value() * load_scale_ + load_bias_nm_;
-    return (nm_t(adjusted_nm) * velFF_conversion).value();
+    nm_t adjusted_nm =
+        total_load * load_scale_ + load_bias_nm_ * 1_u_Nm;
+
+    return (adjusted_nm * velFF_conversion).value();
   }
 };
 

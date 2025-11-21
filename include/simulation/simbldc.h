@@ -74,11 +74,32 @@ public:
     nm_t drive_balance = motor_torque_guess - ext_torque;
 
     const radps_t speed = u_abs(vel);
-    const radps_t stick_velocity = 1e-3_u_radps;
+    const radps_t stick_velocity = u_min(1e-3_u_radps, plant.def_bldc.free_speed * 0.01);
     const radps_t slip_velocity = 5e-2_u_radps;
 
     nm_t static_limit = plant.friction * 1.05;
     nm_t dynamic_limit = plant.friction;
+    
+    double friction_direction = 0.0;
+    if (speed >= stick_velocity) {
+      friction_direction = vel.value();
+    } else {
+      radps_t vel_predicted_no_friction = SimHelper::predict_velocity(dt, v0, DC, I_lim,
+          load_func + viscous + load, plant.inertia, plant.def_bldc, plant.circuit_res);
+      
+      if (std::abs(vel.value()) > 1e-6) {
+        friction_direction = vel.value();
+      } else if (std::abs(vel_predicted_no_friction.value()) > 1e-6) {
+        friction_direction = vel_predicted_no_friction.value();
+      } else {
+        friction_direction = drive_balance.value();
+      }
+      
+      if (friction_direction == 0.0) {
+        friction_direction = 1.0;
+      }
+    }
+    
     nm_t friction = 0_u_Nm;
 
     if (speed < stick_velocity) {
@@ -88,24 +109,38 @@ public:
       if (balance_abs <= static_limit_value) {
         friction = -drive_balance;
       } else {
-        double direction_source =
-            (std::abs(vel.value()) > 1e-9) ? vel.value() : drive_balance.value();
-        if (direction_source == 0.0) {
-          direction_source = 1.0;
-        }
-        friction = dynamic_limit * -std::copysign(1.0, direction_source);
+        friction = dynamic_limit * -std::copysign(1.0, friction_direction);
       }
     } else {
       double blend = std::tanh((speed / slip_velocity).value());
       blend = std::clamp(blend, 0.0, 1.0);
       nm_t blended_mag = static_limit * (1.0 - blend) + dynamic_limit * blend;
-      friction = -u_copysign(blended_mag, vel.value());
+      friction = -u_copysign(blended_mag, friction_direction);
     }
 
     nm_t inh_load = load_func + viscous + friction;
 
-    vel = SimHelper::predict_velocity(dt, v0, DC, I_lim, inh_load + load,
+    radps_t vel_predicted = SimHelper::predict_velocity(dt, v0, DC, I_lim, inh_load + load,
         plant.inertia, plant.def_bldc, plant.circuit_res);
+    
+    if ((v0.value() > 0.0 && vel_predicted.value() < 0.0) ||
+        (v0.value() < 0.0 && vel_predicted.value() > 0.0)) {
+      vel = 0_u_radps;
+    } else {
+      const radps_t speed_predicted = u_abs(vel_predicted);
+      if (speed_predicted < stick_velocity) {
+        if (speed < stick_velocity && std::abs(drive_balance.value()) <= static_limit.value()) {
+          vel = 0_u_radps;
+        } else {
+          double blend_factor = (speed_predicted / stick_velocity).value();
+          blend_factor = std::clamp(blend_factor, 0.0, 1.0);
+          vel = vel_predicted * blend_factor;
+        }
+      } else {
+        vel = vel_predicted;
+      }
+    }
+    
     pos = SimHelper::predict_position(dt, pos, v0, vel);
     current = SimHelper::predict_current(
         vel, DC, I_lim, plant.def_bldc, plant.circuit_res);
@@ -115,8 +150,7 @@ public:
   void SetLoad(nm_t load) { this->load = load; }
 
   void setControlTarget(double DC) {
-    this->DC = DC;
-    DC = std::clamp(DC, -1.0, 1.0);
+    this->DC = std::clamp(DC, -1.0, 1.0);
   }
 
   radps_t getVelocity() const { return vel; }

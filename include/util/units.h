@@ -765,13 +765,15 @@ auto u_copysign(const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u,
 }
 
 // Clamp
-template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
-    typename RTag>
-Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_clamp(
-    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u,
-    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &min,
-    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &max) {
+template <typename FacU, typename FacMin, typename FacMax, typename L, typename M, typename T, typename I,
+    typename R, typename LTagU, typename MTagU, typename TTagU, typename ITagU,
+    typename RTagU, typename LTagMin, typename MTagMin, typename TTagMin, typename ITagMin,
+    typename RTagMin, typename LTagMax, typename MTagMax, typename TTagMax, typename ITagMax,
+    typename RTagMax>
+Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU, RTagU> u_clamp(
+    const Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU, RTagU> &u,
+    const Unit<FacMin, L, M, T, I, R, LTagMin, MTagMin, TTagMin, ITagMin, RTagMin> &min,
+    const Unit<FacMax, L, M, T, I, R, LTagMax, MTagMax, TTagMax, ITagMax, RTagMax> &max) {
   auto base = u.to_base();
   const auto min_base = min.to_base();
   const auto max_base = max.to_base();
@@ -780,27 +782,29 @@ Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_clamp(
   } else if (base > max_base) {
     base = max_base;
   }
-  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+  return Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU, RTagU>::from_base(
       base);
 }
 
 // Min/Max
-template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
-    typename RTag>
-constexpr Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_min(
-    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &a,
-    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &b) {
-  return (a.to_base() < b.to_base()) ? a : b;
+template <typename FacA, typename FacB, typename L, typename M, typename T, typename I,
+    typename R, typename LTagA, typename MTagA, typename TTagA, typename ITagA,
+    typename RTagA, typename LTagB, typename MTagB, typename TTagB, typename ITagB,
+    typename RTagB>
+constexpr Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> u_min(
+    const Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> &a,
+    const Unit<FacB, L, M, T, I, R, LTagB, MTagB, TTagB, ITagB, RTagB> &b) {
+  return (a.to_base() < b.to_base()) ? a : Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA>(b);
 }
 
-template <typename Fac, typename L, typename M, typename T, typename I,
-    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
-    typename RTag>
-constexpr Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_max(
-    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &a,
-    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &b) {
-  return (a.to_base() > b.to_base()) ? a : b;
+template <typename FacA, typename FacB, typename L, typename M, typename T, typename I,
+    typename R, typename LTagA, typename MTagA, typename TTagA, typename ITagA,
+    typename RTagA, typename LTagB, typename MTagB, typename TTagB, typename ITagB,
+    typename RTagB>
+constexpr Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> u_max(
+    const Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> &a,
+    const Unit<FacB, L, M, T, I, R, LTagB, MTagB, TTagB, ITagB, RTagB> &b) {
+  return (a.to_base() > b.to_base()) ? a : Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA>(b);
 }
 
 // Trigonometric functions
