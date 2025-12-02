@@ -48,8 +48,7 @@ public:
     }
 
     nm_t total_load = total_external + friction_load;
-    nm_t adjusted_nm =
-        total_load * load_scale_ + load_bias_nm_ * 1_u_Nm;
+    nm_t adjusted_nm = total_load * load_scale_ + load_bias_nm_ * 1_u_Nm;
 
     return (adjusted_nm * velFF_conversion).value();
   }
