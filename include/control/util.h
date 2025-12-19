@@ -14,6 +14,7 @@ class FFModel {
 private:
   BasePlant base_plant;
   ohm_t ir;
+  radps_t omega_max_ = 600.0_u_radps;
   UnitDivision<scalar_t, nm_t> velFF_conversion;
   double load_scale_ = 1.0;
   double load_bias_nm_ = 0.0;
@@ -24,6 +25,7 @@ public:
       : base_plant(def_sys),
         ir(base_plant.def_bldc.operating_voltage /
             base_plant.def_bldc.stall_current),
+        omega_max_(base_plant.def_bldc.free_speed),
         velFF_conversion((base_plant.circuit_res + ir) /
                          (ir * def_sys.def_bldc.stall_torque)) {}
 
@@ -41,10 +43,11 @@ public:
     nm_t total_external = load + viscous_load;
     nm_t friction_load = 0.0_u_Nm;
 
-    // const radps_t speed = u_abs(omega);
-
     if (!cut) {
-      friction_load = u_copysign(base_plant.friction * friction_scale_, omega);
+      friction_load = base_plant.friction * friction_scale_ *
+                      u_tanh(1_u_rad * 2.0 * omega /
+                             omega_max_);  // Magic number 2.0 adjusted to
+                                           // match experimental data
     }
 
     nm_t total_load = total_external + friction_load;
@@ -78,6 +81,45 @@ public:
     inner_hyst = inner;
     outer_hyst = outer;
   }
+};
+
+class PositionErrorAccumulator {
+private:
+  UnitCompound<radian_t, second_t> integral_ = 0.0_u_rad * 0.0_u_s;
+  UnitCompound<radian_t, second_t> max_integral_ = 0.04_u_rad * 0.0_u_s;
+  double max_output_ = 0.04;
+  second_t kD = 0.005_u_s;
+
+public:
+  PositionErrorAccumulator() = default;
+
+  void setMaxOutput(double max_output) {
+    max_output_ = std::abs(max_output);
+    max_integral_ = max_output_ * 1.5_u_rad * 1_u_s;
+  }
+  double update(radian_t position_error, radps_t current_velocity,
+      radps_t free_speed, second_t control_period,
+      radian_t activation_threshold, double main_controller_output = 0.0) {
+    if (main_controller_output > max_output_) {
+      integral_ = 0.0_u_rad * 0.0_u_s;
+      return 0.0;
+    }
+    position_error -= current_velocity * kD;
+    integral_ += position_error * control_period;
+    integral_ = std::clamp(integral_, -max_integral_, max_integral_);
+    if (position_error > activation_threshold)
+      integral_ *=
+          1 - std::abs(u_tanh(1_u_rad * position_error / activation_threshold));
+    else
+      integral_ *=
+          std::abs(u_tanh(1_u_rad * position_error / activation_threshold));
+
+    return std::clamp(integral_.value(), -max_output_, max_output_);
+  }
+
+  void reset() { integral_ = 0.0_u_rad * 0.0_u_s; }
+
+  double getIntegral() const { return integral_.value(); }
 };
 
 }

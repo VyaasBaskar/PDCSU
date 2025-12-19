@@ -1414,6 +1414,25 @@ public:
     return avg / sysvmax;
   }
 
+  double desaturate(double dist_to_target, double desat_thresh) {
+    const double x = std::abs(dist_to_target);
+
+    const double a = 0.2;
+    const double b = 0.6;
+
+    const double k1 = 7.8 / desat_thresh;
+    const double k2 = 7.8 / desat_thresh;
+
+    const double r0 = b * (1.0 - std::tanh(k2 * desat_thresh)) * 0.5;
+
+    const double scale = 1.0 / (1.0 - r0);
+
+    const double raw = a * std::tanh(k1 * x) +
+                       b * (std::tanh(k2 * (x - desat_thresh)) + 1.0) * 0.5;
+
+    return scale * (raw - r0);
+  }
+
   std::vector<double> getProjectedOutput(
       int steps, double desat_thresh = 15.0) {
     std::vector<double> output(steps);
@@ -1432,7 +1451,7 @@ public:
       const double dist_to_target = std::abs(x - T);
       if (dist_to_target < desat_thresh) {
         const double P_normalized = P / sysvmax;
-        const double scale = std::max(0.03, dist_to_target / desat_thresh);
+        const double scale = desaturate(dist_to_target, desat_thresh);
         output[i] = output[i] * scale + P_normalized * (1.0 - scale);
       }
 
@@ -1465,6 +1484,7 @@ private:
   BasePlant plant;
   FFModel ffModel;
   SymmetricHysteresis hys;
+  PositionErrorAccumulator pos_accumulator_;
 
   amp_t current_limit;
   double scaling_factor = 1.0;
@@ -1505,8 +1525,19 @@ public:
 
     nm_t sys_tau_max =
         plant.def_bldc.stall_torque * ir / (plant.circuit_res + ir);
-    scaling_factor = (current_limit / plant.def_bldc.stall_current).value() *
-                     (plant.def_bldc.stall_torque / sys_tau_max).value();
+
+    double ir_value = ir.value();
+    double circuit_res_value = plant.circuit_res.value();
+    double min_denom = std::min(plant.def_bldc.stall_current.value(),
+        plant.def_bldc.stall_current.value() * (circuit_res_value + ir_value) /
+            ir_value);
+    double adjusted_tau = (plant.def_bldc.stall_torque.value() *
+                           current_limit.value() / min_denom);
+    constexpr double kMinTorque = 1e-3;
+    if (adjusted_tau < kMinTorque) adjusted_tau = kMinTorque;
+
+    double original_sys_tau_max = sys_tau_max.value();
+    scaling_factor = adjusted_tau / original_sys_tau_max;
     scaling_factor = std::min(scaling_factor, 1.0);
   }
 
@@ -1529,11 +1560,11 @@ public:
         u_abs(T - T_) > radian_t(kPosReoptThreshold) ||
         u_abs(P - P_) > radps_t(kVelReoptThreshold) ||
         projection >= projected_output_.size() - 1) {
+      pos_accumulator_.reset();
       icnor->setTargetAndState(T, P, x0, v0);
       icnor->optimize();
       const auto &tuning = icnor->getTuningParameters();
-      ffModel.setLoadAdjustments(tuning.load_scale, 0.0,
-          tuning.friction_scale);  // tuning.load_bias, tuning.friction_scale);
+      ffModel.setLoadAdjustments(tuning.load_scale, 0.0, tuning.friction_scale);
       projected_output_ =
           icnor->getProjectedOutput(projection_horizon, desat_thresh.value());
       projection = 0U;
@@ -1542,15 +1573,27 @@ public:
     }
 
     double orig_output = projected_output_[projection++];
-    orig_output =
-        (((plant.def_bldc.free_speed * orig_output - v0) * scaling_factor +
-             v0) /
-            plant.def_bldc.free_speed)
-            .value();
+
+    const double v0_normalized = v0.value() / plant.def_bldc.free_speed.value();
+    const double v0_abs_normalized = std::fabs(v0_normalized);
+
+    const double velocity_dependent_scale =
+        scaling_factor +
+        (1.0 - scaling_factor) * std::min(1.0, v0_abs_normalized);
+    orig_output = (orig_output - v0_normalized) * velocity_dependent_scale +
+                  v0_normalized;
 
     bool cut = hys.cut(T, x0);
+    const radian_t pos_error = T - x0;
+    const radian_t activation_threshold = desat_thresh * 0.5;
+    const second_t control_period_sec = second_t(plant.control_period.value());
+    const double main_output =
+        (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, cut);
+    const double accumulator_output =
+        pos_accumulator_.update(pos_error, v0, plant.def_bldc.free_speed,
+            control_period_sec, activation_threshold, main_output);
 
-    return (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, cut);
+    return main_output + accumulator_output;
   }
 
   bool hasValidSolution() const {

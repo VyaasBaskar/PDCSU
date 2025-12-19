@@ -216,7 +216,8 @@ public:
   }
 
   template <typename Ratio>
-  void __internal_concat_dim(std::ostringstream &oss, const char *symbol) const {
+  void __internal_concat_dim(
+      std::ostringstream &oss, const char *symbol) const {
     if constexpr (Ratio::num != 0) {
       if constexpr (Ratio::num == 1 && Ratio::den == 1)
         oss << symbol << " ";
@@ -254,8 +255,7 @@ public:
   template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
       typename R2, typename LTag2, typename MTag2, typename TTag2,
       typename ITag2, typename RTag2,
-      typename = std::enable_if_t<
-          same_dimensions<L2, M2, T2, I2, R2>(), int>>
+      typename = std::enable_if_t<same_dimensions<L2, M2, T2, I2, R2>(), int>>
   constexpr Unit(
       const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
           &o)
@@ -765,15 +765,18 @@ auto u_copysign(const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u,
 }
 
 // Clamp
-template <typename FacU, typename FacMin, typename FacMax, typename L, typename M, typename T, typename I,
-    typename R, typename LTagU, typename MTagU, typename TTagU, typename ITagU,
-    typename RTagU, typename LTagMin, typename MTagMin, typename TTagMin, typename ITagMin,
-    typename RTagMin, typename LTagMax, typename MTagMax, typename TTagMax, typename ITagMax,
-    typename RTagMax>
+template <typename FacU, typename FacMin, typename FacMax, typename L,
+    typename M, typename T, typename I, typename R, typename LTagU,
+    typename MTagU, typename TTagU, typename ITagU, typename RTagU,
+    typename LTagMin, typename MTagMin, typename TTagMin, typename ITagMin,
+    typename RTagMin, typename LTagMax, typename MTagMax, typename TTagMax,
+    typename ITagMax, typename RTagMax>
 Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU, RTagU> u_clamp(
     const Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU, RTagU> &u,
-    const Unit<FacMin, L, M, T, I, R, LTagMin, MTagMin, TTagMin, ITagMin, RTagMin> &min,
-    const Unit<FacMax, L, M, T, I, R, LTagMax, MTagMax, TTagMax, ITagMax, RTagMax> &max) {
+    const Unit<FacMin, L, M, T, I, R, LTagMin, MTagMin, TTagMin, ITagMin,
+        RTagMin> &min,
+    const Unit<FacMax, L, M, T, I, R, LTagMax, MTagMax, TTagMax, ITagMax,
+        RTagMax> &max) {
   auto base = u.to_base();
   const auto min_base = min.to_base();
   const auto max_base = max.to_base();
@@ -782,39 +785,49 @@ Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU, RTagU> u_clamp(
   } else if (base > max_base) {
     base = max_base;
   }
-  return Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU, RTagU>::from_base(
-      base);
+  return Unit<FacU, L, M, T, I, R, LTagU, MTagU, TTagU, ITagU,
+      RTagU>::from_base(base);
 }
 
 // Min/Max
-template <typename FacA, typename FacB, typename L, typename M, typename T, typename I,
-    typename R, typename LTagA, typename MTagA, typename TTagA, typename ITagA,
-    typename RTagA, typename LTagB, typename MTagB, typename TTagB, typename ITagB,
-    typename RTagB>
+template <typename FacA, typename FacB, typename L, typename M, typename T,
+    typename I, typename R, typename LTagA, typename MTagA, typename TTagA,
+    typename ITagA, typename RTagA, typename LTagB, typename MTagB,
+    typename TTagB, typename ITagB, typename RTagB>
 constexpr Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> u_min(
     const Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> &a,
     const Unit<FacB, L, M, T, I, R, LTagB, MTagB, TTagB, ITagB, RTagB> &b) {
-  return (a.to_base() < b.to_base()) ? a : Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA>(b);
+  return (a.to_base() < b.to_base())
+             ? a
+             : Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA>(b);
 }
 
-template <typename FacA, typename FacB, typename L, typename M, typename T, typename I,
-    typename R, typename LTagA, typename MTagA, typename TTagA, typename ITagA,
-    typename RTagA, typename LTagB, typename MTagB, typename TTagB, typename ITagB,
-    typename RTagB>
+template <typename FacA, typename FacB, typename L, typename M, typename T,
+    typename I, typename R, typename LTagA, typename MTagA, typename TTagA,
+    typename ITagA, typename RTagA, typename LTagB, typename MTagB,
+    typename TTagB, typename ITagB, typename RTagB>
 constexpr Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> u_max(
     const Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA> &a,
     const Unit<FacB, L, M, T, I, R, LTagB, MTagB, TTagB, ITagB, RTagB> &b) {
-  return (a.to_base() > b.to_base()) ? a : Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA>(b);
+  return (a.to_base() > b.to_base())
+             ? a
+             : Unit<FacA, L, M, T, I, R, LTagA, MTagA, TTagA, ITagA, RTagA>(b);
 }
 
 // Trigonometric functions
 static inline double u_sin(const radian_t &a) { return std::sin(a.to_base()); }
 static inline double u_cos(const radian_t &a) { return std::cos(a.to_base()); }
 static inline double u_tan(const radian_t &a) { return std::tan(a.to_base()); }
+static inline double u_tanh(const radian_t &a) {
+  return std::tanh(a.to_base());
+}
 
 static inline double u_sin(const degree_t &a) { return std::sin(a.to_base()); }
 static inline double u_cos(const degree_t &a) { return std::cos(a.to_base()); }
 static inline double u_tan(const degree_t &a) { return std::tan(a.to_base()); }
+static inline double u_tanh(const degree_t &a) {
+  return std::tanh(a.to_base());
+}
 
 static inline radian_t u_asin(double x) { return radian_t(std::asin(x)); }
 static inline radian_t u_acos(double x) { return radian_t(std::acos(x)); }
