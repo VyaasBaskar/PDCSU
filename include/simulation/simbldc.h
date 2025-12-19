@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <deque>
+#include <random>
 
 #include "util/sysdef.h"
 #include "util/units.h"
@@ -17,6 +19,11 @@ using namespace pdcsu::util;
 namespace pdcsu::simulation {
 
 struct SimHelper {
+  inline static std::mt19937 gen{std::random_device{}()};
+  inline static std::uniform_real_distribution<double> dis_vel_q{-1.0, 1.0};
+  inline static std::normal_distribution<double> dis_vel_n{0.0, 0.0005};
+  inline static std::normal_distribution<double> dis_pos_n{0.0, 0.06};
+
   static radps_t predict_velocity(second_t dt, radps_t v0, double DC,
       amp_t I_lim, nm_t load, kgm2_t inertia, DefBLDC def_bldc,
       ohm_t circuit_res) {
@@ -56,13 +63,39 @@ struct SimHelper {
     current *= scalar_t(winding_res / (winding_res + circuit_res));
     return u_clamp(current, -I_lim, I_lim);
   }
+
+  static radps_t vel_noise(radps_t v, radps_t v_max) {
+    return v * 0.1 * dis_vel_q(gen) + v_max * dis_vel_n(gen);
+  }
+
+  static radian_t pos_noise() { return 1_u_rad * dis_pos_n(gen); }
 };
 
 class SimBLDC {
 public:
-  SimBLDC(BasePlant plant) : plant(plant) {}
+  SimBLDC(BasePlant plant) : plant(plant) {
+    setSensorLatency(15_u_ms, 15_u_ms, 20_u_ms);
+    setActuatorLatency(10_u_ms);
+  }
 
   void Tick(ms_t dt) {
+    sim_time_ += dt;
+
+    // Actuator latency
+    while (!actuator_queue_.empty() &&
+           actuator_queue_.front().application_time <= sim_time_) {
+      this->DC = actuator_queue_.front().DC;
+      actuator_queue_.pop_front();
+    }
+
+    // Sensor latency
+    if (hasSensorLatency()) {
+      sensor_history_.push_back({pos, vel, current});
+      size_t max_history = static_cast<size_t>(
+          std::max(1000.0 / plant.control_period.value(), 100.0));
+      if (sensor_history_.size() > max_history) { sensor_history_.pop_front(); }
+    }
+
     radps_t v0 = vel;
 
     nm_t viscous = plant.viscous_damping * vel;
@@ -88,9 +121,8 @@ public:
       } else {
         friction = u_max(-drive_balance, -static_friction);
       }
-      // TODO Check signs FIX
     } else {
-      friction =  // TODO check signs FIx
+      friction =
           plant.friction *
           u_tanh(1_u_rad * 2.0 * vel /
                  radps_t(
@@ -111,11 +143,41 @@ public:
   void SetCurrentLimit(amp_t limit) { I_lim = limit; }
   void SetLoad(nm_t load) { this->load = load; }
 
-  void setControlTarget(double DC) { this->DC = std::clamp(DC, -1.0, 1.0); }
+  void setControlTarget(double DC) {
+    double clamped_dc = std::clamp(DC, -1.0, 1.0);
+    if (actuator_latency_ == 0_u_ms) {
+      this->DC = clamped_dc;
+    } else {
+      actuator_queue_.push_back({clamped_dc, sim_time_ + actuator_latency_});
+    }
+  }
 
-  radps_t getVelocity() const { return vel; }
-  radian_t getPosition() const { return pos; }
-  amp_t getCurrent() const { return current; }
+  void setActuatorLatency(ms_t latency) {
+    actuator_latency_ = latency;
+    actuator_queue_.clear();
+  }
+
+  void setSensorLatency(
+      ms_t pos_latency, ms_t vel_latency, ms_t current_latency) {
+    sensor_pos_latency_ = pos_latency;
+    sensor_vel_latency_ = vel_latency;
+    sensor_current_latency_ = current_latency;
+    sensor_history_.clear();
+  }
+
+  radps_t getVelocity() const {
+    radps_t v = getDelayedSensor(sensor_vel_latency_, vel);
+    return v + SimHelper::vel_noise(v, plant.def_bldc.free_speed);
+  }
+
+  radian_t getPosition() const {
+    radian_t p = getDelayedSensor(sensor_pos_latency_, pos);
+    return p + SimHelper::pos_noise();
+  }
+
+  amp_t getCurrent() const {
+    return getDelayedSensor(sensor_current_latency_, current);
+  }
 
   ms_t getTime() {
     return ms_t(std::chrono::duration<double, std::milli>(
@@ -124,6 +186,50 @@ public:
   }
 
 private:
+  struct DelayedCommand {
+    double DC;
+    ms_t application_time;
+  };
+
+  struct SensorSnapshot {
+    radian_t position;
+    radps_t velocity;
+    amp_t current;
+  };
+
+  bool hasSensorLatency() const {
+    return sensor_pos_latency_ != 0_u_ms || sensor_vel_latency_ != 0_u_ms ||
+           sensor_current_latency_ != 0_u_ms;
+  }
+
+  template <typename T>
+  T getDelayedSensor(ms_t latency, T current_value) const {
+    if (latency == 0_u_ms || sensor_history_.empty()) { return current_value; }
+
+    size_t delay_steps = calculateDelaySteps(latency);
+    if (delay_steps >= sensor_history_.size()) { return current_value; }
+
+    return getSensorFromHistory<T>(sensor_history_.size() - 1 - delay_steps);
+  }
+
+  size_t calculateDelaySteps(ms_t latency) const {
+    if (plant.control_period == 0_u_ms) return 0;
+    return static_cast<size_t>(std::max(
+        0.0, std::round(latency.value() / plant.control_period.value())));
+  }
+
+  template <typename T> T getSensorFromHistory(size_t index) const {
+    const auto& snapshot = sensor_history_[index];
+    if constexpr (std::is_same_v<T, radian_t>) {
+      return snapshot.position;
+    } else if constexpr (std::is_same_v<T, radps_t>) {
+      return snapshot.velocity;
+    } else if constexpr (std::is_same_v<T, amp_t>) {
+      return snapshot.current;
+    }
+    return T{};
+  }
+
   amp_t I_lim = 20_u_A;
   nm_t load = 0_u_Nm;
 
@@ -134,6 +240,14 @@ private:
   amp_t current = 0_u_A;
 
   BasePlant plant;
+
+  ms_t sim_time_ = 0_u_ms;
+  ms_t actuator_latency_ = 0_u_ms;
+  ms_t sensor_pos_latency_ = 0_u_ms;
+  ms_t sensor_vel_latency_ = 0_u_ms;
+  ms_t sensor_current_latency_ = 0_u_ms;
+  std::deque<DelayedCommand> actuator_queue_;
+  std::deque<SensorSnapshot> sensor_history_;
 };
 
 }

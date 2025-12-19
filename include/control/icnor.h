@@ -1414,10 +1414,11 @@ public:
     return avg / sysvmax;
   }
 
-  double desaturate(double dist_to_target, double desat_thresh) {
+  double desaturate(
+      double dist_to_target, double desat_thresh, double inner_desat) {
     const double x = std::abs(dist_to_target);
 
-    const double a = 0.2;
+    const double a = inner_desat;
     const double b = 0.6;
 
     const double k1 = 7.8 / desat_thresh;
@@ -1434,7 +1435,7 @@ public:
   }
 
   std::vector<double> getProjectedOutput(
-      int steps, double desat_thresh = 15.0) {
+      int steps, double desat_thresh = 15.0, double inner_desat = 0.45) {
     std::vector<double> output(steps);
 
     double x = x0;
@@ -1451,7 +1452,8 @@ public:
       const double dist_to_target = std::abs(x - T);
       if (dist_to_target < desat_thresh) {
         const double P_normalized = P / sysvmax;
-        const double scale = desaturate(dist_to_target, desat_thresh);
+        const double scale =
+            desaturate(dist_to_target, desat_thresh, inner_desat);
         output[i] = output[i] * scale + P_normalized * (1.0 - scale);
       }
 
@@ -1467,9 +1469,9 @@ public:
   }
 
   std::vector<double> getProjectedOutput(
-      ms_t duration, double desat_thresh = 15.0) {
+      ms_t duration, double desat_thresh = 15.0, double inner_desat = 0.45) {
     int steps = static_cast<int>(duration.value() / control_period);
-    return getProjectedOutput(steps, desat_thresh);
+    return getProjectedOutput(steps, desat_thresh, inner_desat);
   }
 };
 
@@ -1489,6 +1491,7 @@ private:
   amp_t current_limit;
   double scaling_factor = 1.0;
   radian_t desat_thresh = 15.0_u_rad;
+  double inner_desat = 0.45;
 
   std::shared_ptr<ICNORLearner> learner_;
   std::unique_ptr<ICNOR> icnor;
@@ -1541,8 +1544,9 @@ public:
     scaling_factor = std::min(scaling_factor, 1.0);
   }
 
-  void setDesaturationThresh(radian_t thresh) {
+  void setDesaturationThresh(radian_t thresh, double inner_desat_frac = 0.45) {
     desat_thresh = std::clamp(thresh, 0.0_u_rad, 35.0_u_rad);
+    inner_desat = std::clamp(inner_desat_frac, 0.0, 1.0);
   }
 
   void setProjectionHorizon(unsigned int horizon) {
@@ -1565,8 +1569,8 @@ public:
       icnor->optimize();
       const auto &tuning = icnor->getTuningParameters();
       ffModel.setLoadAdjustments(tuning.load_scale, 0.0, tuning.friction_scale);
-      projected_output_ =
-          icnor->getProjectedOutput(projection_horizon, desat_thresh.value());
+      projected_output_ = icnor->getProjectedOutput(
+          projection_horizon, desat_thresh.value(), inner_desat);
       projection = 0U;
       T_ = T;
       P_ = P;
@@ -1589,9 +1593,8 @@ public:
     const second_t control_period_sec = second_t(plant.control_period.value());
     const double main_output =
         (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, cut);
-    const double accumulator_output =
-        pos_accumulator_.update(pos_error, v0, plant.def_bldc.free_speed,
-            control_period_sec, activation_threshold, main_output);
+    const double accumulator_output = pos_accumulator_.update(
+        pos_error, v0, control_period_sec, activation_threshold, main_output);
 
     return main_output + accumulator_output;
   }

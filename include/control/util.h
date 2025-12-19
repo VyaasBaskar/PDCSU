@@ -88,7 +88,7 @@ private:
   UnitCompound<radian_t, second_t> integral_ = 0.0_u_rad * 0.0_u_s;
   UnitCompound<radian_t, second_t> max_integral_ = 0.04_u_rad * 0.0_u_s;
   double max_output_ = 0.04;
-  second_t kD = 0.005_u_s;
+  second_t kD = 0.007_u_s;
 
 public:
   PositionErrorAccumulator() = default;
@@ -98,9 +98,9 @@ public:
     max_integral_ = max_output_ * 1.5_u_rad * 1_u_s;
   }
   double update(radian_t position_error, radps_t current_velocity,
-      radps_t free_speed, second_t control_period,
-      radian_t activation_threshold, double main_controller_output = 0.0) {
-    if (main_controller_output > max_output_) {
+      second_t control_period, radian_t activation_threshold,
+      double main_controller_output = 0.0) {
+    if (std::abs(main_controller_output) > 1.5 * max_output_) {
       integral_ = 0.0_u_rad * 0.0_u_s;
       return 0.0;
     }
