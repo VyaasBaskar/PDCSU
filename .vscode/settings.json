@@ -75,7 +75,8 @@
         "coroutine": "cpp",
         "resumable": "cpp",
         "filesystem": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "deque": "cpp"
     },
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python-envs.pythonProjects": []

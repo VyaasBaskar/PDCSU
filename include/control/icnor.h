@@ -36,69 +36,56 @@ namespace pdcsu::control {
 
 namespace icnor_internal {
 struct ICNORTuningParameters {
-  double time_scale_factor = 1.0;
-  double time_offset = 0.0;
   double z_fudge = 1.0;
   double load_scale = 1.0;
-  double load_bias = 0.0;
   double friction_scale = 1.0;
+};
+
+struct ICNORLearningSample {
+  double position;
+  double velocity;
+  double output_raw;
+  double load_nm;
+  double time_s;
+};
+
+struct ICNORCompiledLearningSample {
+  double accum_load;
+  double accum_output_raw;
+  double accum_fric_sign;
+  double vel_mdiff;
+};
+
+struct ICNORLearnerMinInfo {
+  double tau_max;
+  double w_f;
+  double z_init;
+  double friction_init;
+};
+
+struct LearningRates {
+  static constexpr double kLoadScaleLearningRate = 0.02;
+  static constexpr double kFrictionScaleLearningRate = 0.02;
+  static constexpr double kZLearningRate = 0.002;
 };
 
 class ICNOR;
 }
 
-struct ICNORLearningSample {
-  int64_t timestamp_ms = 0;
-  double target_position = 0.0;
-  double target_velocity = 0.0;
-  double state_position = 0.0;
-  double state_velocity = 0.0;
-  double tstar = 0.0;
-  double zeta = 0.0;
-  double alpha = 0.0;
-  double beta = 0.0;
-  double gamma = 0.0;
-  double v_max = 0.0;
-  double sysvmax = 0.0;
-  double control_period = 0.0;
-  double max_control_target = 0.0;
-  double position_error = 0.0;
-  double velocity_error = 0.0;
-  double beta_abs = 0.0;
-  double gamma_abs = 0.0;
-  double t_hi_init = 0.0;
-  double t_lo_init = 0.0;
-  double distance_to_target = 0.0;
-  bool saturated = false;
-  bool solved = false;
-};
-
 class ICNORLearner : public std::enable_shared_from_this<ICNORLearner> {
 public:
-  struct UpdateResult {
-    std::optional<icnor_internal::ICNORTuningParameters> new_tuning;
-    bool should_save = false;
-  };
-
-  ICNORLearner();
-  explicit ICNORLearner(std::string storage_path);
+  explicit ICNORLearner(std::string &storage_path,
+      const icnor_internal::ICNORLearnerMinInfo &min_info);
   ~ICNORLearner();
 
   void setStoragePath(const std::string &path);
   std::string storagePath() const;
 
-  void enableAutoSave(bool enabled);
-  void setAutoSaveStride(size_t stride);
+  void putLearningSample(const icnor_internal::ICNORLearningSample &sample);
+  void processCompiledSamples();
 
   void loadAsync();
   void saveAsync();
-  bool saveIfDirty();
-
-  UpdateResult notifyOptimizationResult(const ICNORLearningSample &sample,
-      const icnor_internal::ICNORTuningParameters &current_params);
-
-  std::optional<icnor_internal::ICNORTuningParameters> suggestFromHistory(
-      const icnor_internal::ICNORTuningParameters &current_params);
 
   icnor_internal::ICNORTuningParameters getCurrentTuning() const;
 
@@ -106,279 +93,38 @@ private:
   static std::string ensureExtension(std::string path);
   static bool endsWithInsensitive(
       const std::string &value, const std::string &ending);
-
-  struct MotionMetrics {
-    size_t samples = 0;
-    size_t hi_samples = 0;
-    double avg_hi_ratio = 0.65;
-    double saturation_ratio = 0.0;
-    double failure_ratio = 0.0;
-    double avg_peak_error = 0.0;
-    double avg_control_ratio = 0.0;
-    double final_position_error = 0.0;
-    double final_velocity_error = 0.0;
-    double distance_travelled = 0.0;
-    double overshoot_ratio = 0.0;
-    double settled_fraction = 0.0;
-    double settling_time_s = 0.0;
-    int oscillation_events = 0;
-    double max_velocity = 0.0;
-    double initial_velocity_abs = 0.0;
-    double initial_position_offset = 0.0;
-    bool completed = false;
-  };
-
-  struct MotionAccumulator {
-    bool active = false;
-    double target_position = 0.0;
-    double target_velocity = 0.0;
-    double start_distance = 0.0;
-    double last_distance = 0.0;
-    size_t samples = 0;
-    size_t hi_samples = 0;
-    size_t saturated_samples = 0;
-    size_t failure_samples = 0;
-    double sum_hi_ratio = 0.0;
-    double sum_peak_error = 0.0;
-    double sum_control_ratio = 0.0;
-    double final_position_error = 0.0;
-    double final_velocity_error = 0.0;
-    double norm_denominator = 1.0;
-    double max_norm_error = 0.0;
-    double last_norm_error = 0.0;
-    bool last_error_valid = false;
-    int oscillation_events = 0;
-    int last_violation_index = -1;
-    double control_period_s = 0.0;
-    double max_velocity_mag = 0.0;
-    double initial_velocity_sum = 0.0;
-    double initial_position_sum = 0.0;
-    int initial_sample_count = 0;
-
-    void reset() {
-      active = false;
-      target_position = 0.0;
-      target_velocity = 0.0;
-      start_distance = 0.0;
-      last_distance = 0.0;
-      samples = 0;
-      hi_samples = 0;
-      saturated_samples = 0;
-      failure_samples = 0;
-      sum_hi_ratio = 0.0;
-      sum_peak_error = 0.0;
-      sum_control_ratio = 0.0;
-      final_position_error = 0.0;
-      final_velocity_error = 0.0;
-      norm_denominator = 1.0;
-      max_norm_error = 0.0;
-      last_norm_error = 0.0;
-      last_error_valid = false;
-      oscillation_events = 0;
-      last_violation_index = -1;
-      control_period_s = 0.0;
-      max_velocity_mag = 0.0;
-      initial_velocity_sum = 0.0;
-      initial_position_sum = 0.0;
-      initial_sample_count = 0;
-    }
-
-    void begin(const ICNORLearningSample &sample) {
-      active = true;
-      target_position = sample.target_position;
-      target_velocity = sample.target_velocity;
-      start_distance = std::fabs(sample.distance_to_target);
-      last_distance = start_distance;
-      samples = 0;
-      hi_samples = 0;
-      saturated_samples = 0;
-      failure_samples = 0;
-      sum_hi_ratio = 0.0;
-      sum_peak_error = 0.0;
-      sum_control_ratio = 0.0;
-      final_position_error = sample.position_error;
-      final_velocity_error = sample.velocity_error;
-      norm_denominator = std::max({std::fabs(target_position), start_distance,
-          std::fabs(sample.position_error), 1e-3});
-      max_norm_error = 0.0;
-      last_norm_error = 0.0;
-      last_error_valid = false;
-      oscillation_events = 0;
-      last_violation_index = -1;
-      control_period_s = std::max(sample.control_period, 1e-6);
-      max_velocity_mag = std::fabs(sample.state_velocity);
-      initial_velocity_sum = 0.0;
-      initial_position_sum = 0.0;
-      initial_sample_count = 0;
-    }
-
-    bool targetChanged(const ICNORLearningSample &sample) const {
-      constexpr double kTargetPosTol = 1e-3;
-      constexpr double kTargetVelTol = 1e-3;
-      return !active ||
-             std::fabs(sample.target_position - target_position) >
-                 kTargetPosTol ||
-             std::fabs(sample.target_velocity - target_velocity) >
-                 kTargetVelTol;
-    }
-
-    void accumulate(const ICNORLearningSample &sample) {
-      if (!active) { begin(sample); }
-      ++samples;
-      final_position_error = sample.position_error;
-      final_velocity_error = sample.velocity_error;
-      last_distance = std::fabs(sample.distance_to_target);
-      max_velocity_mag =
-          std::max(max_velocity_mag, std::fabs(sample.state_velocity));
-
-      double norm_error =
-          sample.position_error / std::max(norm_denominator, 1e-3);
-      double abs_norm_error = std::fabs(norm_error);
-      max_norm_error = std::max(max_norm_error, abs_norm_error);
-
-      constexpr double kOscAmp = 0.005;
-      if (last_error_valid) {
-        if (norm_error * last_norm_error < 0.0 &&
-            std::max(std::fabs(norm_error), std::fabs(last_norm_error)) >=
-                kOscAmp) {
-          ++oscillation_events;
-        }
-      }
-      last_norm_error = norm_error;
-      last_error_valid = true;
-
-      constexpr double kSettleTol = 0.02;
-      if (abs_norm_error > kSettleTol) {
-        last_violation_index = static_cast<int>(samples) - 1;
-      }
-
-      constexpr int kInitialWindow = 6;
-      constexpr double kInitialDistThresh = 0.12;
-      if (samples <= kInitialWindow &&
-          std::fabs(sample.distance_to_target) <= kInitialDistThresh) {
-        initial_velocity_sum += std::fabs(sample.state_velocity);
-        initial_position_sum += sample.position_error;
-        ++initial_sample_count;
-      }
-
-      if (sample.t_hi_init > 1e-6) {
-        double ratio = sample.tstar / sample.t_hi_init;
-        sum_hi_ratio += ratio;
-        ++hi_samples;
-      }
-      saturated_samples += sample.saturated ? 1 : 0;
-      failure_samples += sample.solved ? 0 : 1;
-
-      double peak_error_norm = (sample.max_control_target - sample.v_max) /
-                               std::max(sample.v_max, 1.0);
-      sum_peak_error += peak_error_norm;
-
-      double control_ratio =
-          sample.max_control_target / std::max(sample.sysvmax, 1.0);
-      sum_control_ratio += control_ratio;
-    }
-
-    MotionMetrics finalize(bool completed) {
-      MotionMetrics metrics;
-      metrics.samples = samples;
-      metrics.hi_samples = hi_samples;
-      metrics.avg_hi_ratio =
-          (hi_samples > 0) ? (sum_hi_ratio / static_cast<double>(hi_samples))
-                           : 0.65;
-      metrics.saturation_ratio = (samples > 0)
-                                     ? static_cast<double>(saturated_samples) /
-                                           static_cast<double>(samples)
-                                     : 0.0;
-      metrics.failure_ratio = (samples > 0)
-                                  ? static_cast<double>(failure_samples) /
-                                        static_cast<double>(samples)
-                                  : 0.0;
-      metrics.avg_peak_error =
-          (samples > 0) ? (sum_peak_error / static_cast<double>(samples)) : 0.0;
-      metrics.avg_control_ratio =
-          (samples > 0) ? (sum_control_ratio / static_cast<double>(samples))
-                        : 0.0;
-      metrics.final_position_error = final_position_error;
-      metrics.final_velocity_error = final_velocity_error;
-      double travelled = std::max(0.0, start_distance - last_distance);
-      metrics.distance_travelled = travelled;
-      metrics.overshoot_ratio = max_norm_error;
-      int settle_steps =
-          (samples > 0) ? static_cast<int>(samples) - last_violation_index - 1
-                        : 0;
-      settle_steps = std::clamp(settle_steps, 0, static_cast<int>(samples));
-      metrics.settled_fraction =
-          (samples > 0) ? settle_steps / static_cast<double>(samples) : 0.0;
-      metrics.settling_time_s =
-          (last_violation_index < 0)
-              ? 0.0
-              : (last_violation_index + 1) * control_period_s;
-      metrics.oscillation_events = oscillation_events;
-      metrics.max_velocity = max_velocity_mag;
-      metrics.initial_velocity_abs =
-          (initial_sample_count > 0)
-              ? (initial_velocity_sum /
-                    static_cast<double>(initial_sample_count))
-              : std::fabs(final_velocity_error);
-      metrics.initial_position_offset =
-          (initial_sample_count > 0)
-              ? (initial_position_sum /
-                    static_cast<double>(initial_sample_count))
-              : final_position_error;
-      metrics.completed = completed && samples > 0;
-      reset();
-      return metrics;
-    }
-  };
-
-  void updateEMAs(const MotionMetrics &metrics);
-  std::optional<icnor_internal::ICNORTuningParameters> deriveTuningLocked(
-      const icnor_internal::ICNORTuningParameters &current_params);
   void waitForIO();
-  bool applyNewtonAdjustment(double metric, double derivative_hint,
-      double metric_scale, double &param, double min_val, double max_val,
-      double max_step, double stability_factor, double confidence_floor) const;
 
   mutable std::mutex mutex_;
   std::string storage_path_;
-  bool auto_save_ = true;
-  size_t autosave_stride_ = 10;
-  size_t updates_since_save_ = 0;
-  bool dirty_ = false;
   mutable std::mutex io_mutex_;
   std::future<void> io_future_;
 
-  size_t motion_count_ = 0;
-  double ema_hi_ratio_ = 0.65;
-  double ema_saturated_ratio_ = 0.0;
-  double ema_failure_ratio_ = 0.0;
-  double ema_peak_error_ = 0.0;
-  double ema_pos_error_ = 0.0;
-  double ema_vel_error_ = 0.0;
-  double ema_control_ratio_ = 0.0;
-  double ema_distance_travelled_ = 0.0;
-  double ema_overshoot_ratio_ = 0.0;
-  double ema_settled_fraction_ = 0.0;
-  double ema_settling_time_s_ = 0.0;
-  double ema_oscillation_events_ = 0.0;
-  double ema_max_velocity_ = 0.0;
-  double ema_initial_velocity_abs_ = 0.0;
-  double ema_initial_position_offset_ = 0.0;
-
-  double ema_time_scale_ = 1.0;
-  double ema_time_offset_ = 0.0;
   double tuned_z_fudge_ = 1.0;
   double tuned_load_scale_ = 1.0;
-  double tuned_load_bias_ = 0.0;
   double tuned_friction_scale_ = 1.0;
 
-  MotionAccumulator motion_acc_;
+  static inline const size_t kSampleCapacity = 15U;
+
+  icnor_internal::ICNORLearningSample first_sample_;
+  icnor_internal::ICNORLearningSample prev_sample_;
+  size_t sample_count_ = 0U;
+
+  double output_accum_ = 0.0;
+  double load_accum_ = 0.0;
+  double fric_accum_sign_ = 0.0;
+
+  const icnor_internal::ICNORLearnerMinInfo min_info_;
+
+  static inline const size_t kCompiledSampleCapacity = 9U;
+  std::vector<icnor_internal::ICNORCompiledLearningSample> compiled_samples_;
 };
 
-inline ICNORLearner::ICNORLearner() : storage_path_("") {}
-
-inline ICNORLearner::ICNORLearner(std::string storage_path)
-    : storage_path_(ensureExtension(std::move(storage_path))) {
+inline ICNORLearner::ICNORLearner(std::string &storage_path,
+    const icnor_internal::ICNORLearnerMinInfo &min_info)
+    : storage_path_(ensureExtension(std::move(storage_path))),
+      min_info_(min_info),
+      compiled_samples_(kCompiledSampleCapacity) {
   if (!storage_path_.empty()) { loadAsync(); }
 }
 
@@ -414,204 +160,6 @@ inline std::string ICNORLearner::storagePath() const {
   return storage_path_;
 }
 
-inline void ICNORLearner::enableAutoSave(bool enabled) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  auto_save_ = enabled;
-}
-
-inline void ICNORLearner::setAutoSaveStride(size_t stride) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  autosave_stride_ = std::max<size_t>(1, stride);
-}
-
-inline void ICNORLearner::updateEMAs(const MotionMetrics &metrics) {
-  constexpr double alpha = 0.15;
-  constexpr double one_minus_alpha = 1.0 - alpha;
-
-  ema_hi_ratio_ =
-      one_minus_alpha * ema_hi_ratio_ + alpha * metrics.avg_hi_ratio;
-  ema_saturated_ratio_ =
-      one_minus_alpha * ema_saturated_ratio_ + alpha * metrics.saturation_ratio;
-  ema_failure_ratio_ =
-      one_minus_alpha * ema_failure_ratio_ + alpha * metrics.failure_ratio;
-  ema_peak_error_ =
-      one_minus_alpha * ema_peak_error_ + alpha * metrics.avg_peak_error;
-  ema_pos_error_ =
-      one_minus_alpha * ema_pos_error_ + alpha * metrics.final_position_error;
-  ema_vel_error_ =
-      one_minus_alpha * ema_vel_error_ + alpha * metrics.final_velocity_error;
-  ema_control_ratio_ =
-      one_minus_alpha * ema_control_ratio_ + alpha * metrics.avg_control_ratio;
-  ema_distance_travelled_ = one_minus_alpha * ema_distance_travelled_ +
-                            alpha * metrics.distance_travelled;
-  ema_overshoot_ratio_ =
-      one_minus_alpha * ema_overshoot_ratio_ + alpha * metrics.overshoot_ratio;
-  ema_settled_fraction_ = one_minus_alpha * ema_settled_fraction_ +
-                          alpha * metrics.settled_fraction;
-  ema_settling_time_s_ =
-      one_minus_alpha * ema_settling_time_s_ + alpha * metrics.settling_time_s;
-  ema_oscillation_events_ =
-      one_minus_alpha * ema_oscillation_events_ +
-      alpha * static_cast<double>(metrics.oscillation_events);
-  ema_max_velocity_ =
-      one_minus_alpha * ema_max_velocity_ + alpha * metrics.max_velocity;
-  ema_initial_velocity_abs_ = one_minus_alpha * ema_initial_velocity_abs_ +
-                              alpha * metrics.initial_velocity_abs;
-  ema_initial_position_offset_ =
-      one_minus_alpha * ema_initial_position_offset_ +
-      alpha * metrics.initial_position_offset;
-  ++motion_count_;
-}
-
-inline std::optional<icnor_internal::ICNORTuningParameters>
-ICNORLearner::deriveTuningLocked(
-    const icnor_internal::ICNORTuningParameters &current_params) {
-  constexpr size_t kMinMotionsForTuning = 3;
-  if (motion_count_ < kMinMotionsForTuning) { return std::nullopt; }
-
-  auto params = current_params;
-  bool changed = false;
-
-  double desired_ratio = 0.65;
-  double overshoot_target = 0.02;
-  double overshoot_metric = ema_overshoot_ratio_ - overshoot_target;
-  double oscillation_metric =
-      std::clamp(ema_oscillation_events_ - 1.0, -1.5, 3.0);
-  double settle_gap = std::clamp(0.85 - ema_settled_fraction_, -0.8, 0.8);
-  double settling_time_metric =
-      std::clamp(ema_settling_time_s_ - 0.15, -0.3, 0.6);
-
-  double time_scale_metric = (ema_hi_ratio_ - desired_ratio) +
-                             0.4 * overshoot_metric + 0.2 * oscillation_metric;
-  double time_scale_stability =
-      std::clamp(1.0 - 0.5 * ema_saturated_ratio_, 0.1, 1.0) *
-      std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
-  if (applyNewtonAdjustment(time_scale_metric, 0.8, 0.04,
-          params.time_scale_factor, 0.4, 2.6, 0.15, time_scale_stability,
-          0.08)) {
-    changed = true;
-  }
-
-  double desired_failure = 0.05;
-  double offset_metric = (ema_failure_ratio_ - desired_failure) +
-                         0.3 * settle_gap + 0.2 * settling_time_metric;
-  double offset_stability =
-      std::clamp(1.0 - 0.3 * ema_saturated_ratio_, 0.0, 1.0) *
-      std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_ + 0.05, 0.0, 1.0);
-  if (applyNewtonAdjustment(offset_metric, -0.6, 0.04, params.time_offset, -0.5,
-          1.5, 0.15, offset_stability, 0.08)) {
-    changed = true;
-  }
-
-  double z_confidence = std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
-                        std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-                        std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
-  double overshoot_penalty = 0.9 * std::max(overshoot_metric, 0.0);
-  z_confidence = std::clamp(z_confidence + 0.1 * overshoot_penalty, 0.0, 1.0);
-  double z_metric =
-      0.5 * ema_peak_error_ + 0.2 * oscillation_metric - overshoot_penalty;
-  if (applyNewtonAdjustment(z_metric, std::max(0.2, ema_control_ratio_ + 0.2),
-          0.15, params.z_fudge, 0.3, 3.0, 0.15, z_confidence, 0.08)) {
-    changed = true;
-  }
-
-  double velocity_error_norm = std::clamp(
-      ema_vel_error_ / std::max(0.01, ema_distance_travelled_ + 1e-3), -2.0,
-      2.0);
-  double load_scale_confidence =
-      std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
-      std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
-  double load_scale_metric = 0.6 * velocity_error_norm +
-                             0.3 * overshoot_metric +
-                             0.1 * settling_time_metric;
-  if (applyNewtonAdjustment(load_scale_metric, 0.8, 0.05, params.load_scale,
-          0.5, 2.0, 0.15, load_scale_confidence, 0.08)) {
-    changed = true;
-  }
-
-  double load_bias_confidence =
-      std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
-      std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_, 0.3, 1.0);
-  double pos_error_abs = std::fabs(ema_pos_error_);
-  double vel_error_abs = std::fabs(ema_vel_error_);
-  if (load_bias_confidence >= 0.15 && pos_error_abs >= 0.001 &&
-      vel_error_abs <= 0.01) {
-    double load_bias_metric = -ema_pos_error_;
-    double bias_gain = std::max(ema_distance_travelled_ * 0.5, 0.05);
-    if (applyNewtonAdjustment(load_bias_metric, bias_gain, 0.01,
-            params.load_bias, -5.0, 5.0, 0.05, load_bias_confidence, 0.12)) {
-      changed = true;
-    }
-  }
-
-  double friction_confidence =
-      std::clamp(ema_distance_travelled_ / 0.05, 0.0, 1.0) *
-      std::clamp(1.0 - ema_failure_ratio_, 0.0, 1.0) *
-      std::clamp(ema_settled_fraction_ + 0.1, 0.0, 1.0);
-  double initial_vel_threshold = 0.015;
-  double friction_vel_term = std::clamp(
-      (ema_initial_velocity_abs_ - initial_vel_threshold) / 0.02, -2.0, 2.0);
-  double friction_metric =
-      0.6 * friction_vel_term +
-      0.3 * std::clamp(ema_oscillation_events_ - 0.5, -1.0, 1.0) +
-      0.1 * overshoot_metric;
-  if (applyNewtonAdjustment(friction_metric, 0.4, 0.03, params.friction_scale,
-          0.5, 2.0, 0.12, friction_confidence, 0.08)) {
-    changed = true;
-  }
-
-  params.time_scale_factor = std::clamp(params.time_scale_factor, 0.4, 2.6);
-  params.time_offset = std::clamp(params.time_offset, -0.5, 1.5);
-  params.z_fudge = std::clamp(params.z_fudge, 0.3, 3.0);
-  params.load_scale = std::clamp(params.load_scale, 0.5, 2.0);
-  params.load_bias = std::clamp(params.load_bias, -5.0, 5.0);
-  params.friction_scale = std::clamp(params.friction_scale, 0.5, 2.0);
-
-  ema_time_scale_ = 0.9 * ema_time_scale_ + 0.1 * params.time_scale_factor;
-  ema_time_offset_ = 0.9 * ema_time_offset_ + 0.1 * params.time_offset;
-  tuned_z_fudge_ = params.z_fudge;
-  tuned_load_scale_ = params.load_scale;
-  tuned_load_bias_ = params.load_bias;
-  tuned_friction_scale_ = params.friction_scale;
-
-  if (!changed) return std::nullopt;
-  return params;
-}
-
-inline bool ICNORLearner::applyNewtonAdjustment(double metric,
-    double derivative_hint, double metric_scale, double &param, double min_val,
-    double max_val, double max_step, double stability_factor,
-    double confidence_floor) const {
-  if (motion_count_ < 3) return false;
-  if (!std::isfinite(metric) || !std::isfinite(derivative_hint)) return false;
-  double bounded_metric_scale = std::max(metric_scale, 1e-6);
-  double motion_factor =
-      1.0 - std::exp(-static_cast<double>(motion_count_) / 100.0);
-  double magnitude_factor =
-      1.0 - std::exp(-std::fabs(metric) / bounded_metric_scale);
-  double stability = std::clamp(stability_factor, 0.0, 1.0);
-  double confidence =
-      std::clamp(motion_factor * magnitude_factor * stability, 0.0, 1.0);
-  if (confidence < confidence_floor) return false;
-
-  double derivative = (std::fabs(derivative_hint) < 1e-6)
-                          ? (derivative_hint >= 0.0 ? 1e-6 : -1e-6)
-                          : derivative_hint;
-  double raw_delta = -metric / derivative;
-  if (!std::isfinite(raw_delta)) return false;
-  raw_delta = std::clamp(raw_delta, -max_step, max_step);
-  double adjusted_delta = raw_delta * confidence;
-  double new_value = std::clamp(param + adjusted_delta, min_val, max_val);
-  if (!std::isfinite(new_value)) return false;
-  if (std::fabs(new_value - param) < 1e-6) return false;
-  param = new_value;
-  return true;
-}
-
 inline void ICNORLearner::waitForIO() {
   std::future<void> worker;
   {
@@ -632,167 +180,22 @@ inline void ICNORLearner::loadAsync() {
   waitForIO();
 
   auto task = [this, path]() {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(path);
     if (!in.is_open()) { return; }
 
-    std::string contents(
-        (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-
-    size_t motion_count = 0;
-    double ema_hi_ratio = 0.65, ema_saturated_ratio = 0.0,
-           ema_failure_ratio = 0.0;
-    double ema_time_scale = 1.0, ema_time_offset = 0.0;
-    double ema_peak_error = 0.0;
-    double ema_pos_error = 0.0;
-    double ema_vel_error = 0.0;
-    double ema_control_ratio = 0.0;
-    double ema_distance_travelled = 0.0;
-    double ema_overshoot = 0.0;
-    double ema_settled_fraction = 0.0;
-    double ema_settling_time = 0.0;
-    double ema_osc_events = 0.0;
-    double ema_max_velocity = 0.0;
-    double ema_initial_velocity_abs = 0.0;
-    double ema_initial_position_offset = 0.0;
     double tuned_z = 1.0;
     double tuned_load_scale = 1.0;
-    double tuned_load_bias = 0.0;
     double tuned_friction_scale = 1.0;
 
-    if (!contents.empty()) {
-      std::istringstream numeric(contents);
-      std::vector<double> values;
-      double value = 0.0;
-      while (numeric >> value) {
-        values.push_back(value);
-      }
-
-      if (values.size() >= 6 && values.size() < 14) {
-        ema_time_scale = values[0];
-        ema_time_offset = values[1];
-        tuned_z = values[2];
-        tuned_load_scale = values[3];
-        tuned_load_bias = values[4];
-        tuned_friction_scale = values[5];
-      } else if (values.size() == 5) {
-        ema_time_scale = values[0];
-        ema_time_offset = values[1];
-        tuned_z = values[2];
-        tuned_load_scale = values[3];
-        tuned_load_bias = values[4];
-      } else if (values.size() >= 19) {
-        // Legacy dense numeric format.
-        motion_count = static_cast<size_t>(std::max(0.0, values[0]));
-        ema_hi_ratio = values[1];
-        ema_saturated_ratio = values[2];
-        ema_failure_ratio = values[3];
-        ema_time_scale = values[4];
-        ema_time_offset = values[5];
-        ema_peak_error = values[6];
-        ema_pos_error = values[7];
-        ema_vel_error = values[8];
-        ema_control_ratio = values[9];
-        ema_distance_travelled = values[10];
-        ema_overshoot = values[11];
-        ema_settled_fraction = values[12];
-        ema_settling_time = values[13];
-        ema_osc_events = values[14];
-        ema_max_velocity = values[15];
-        tuned_z = values[16];
-        tuned_load_scale = values[17];
-        tuned_load_bias = values[18];
-      } else if (values.size() >= 14 && values.size() < 19) {
-        motion_count = static_cast<size_t>(std::max(0.0, values[0]));
-        ema_hi_ratio = values[1];
-        ema_saturated_ratio = values[2];
-        ema_failure_ratio = values[3];
-        ema_time_scale = values[4];
-        ema_time_offset = values[5];
-        ema_peak_error = values[6];
-        ema_pos_error = values[7];
-        ema_vel_error = values[8];
-        ema_control_ratio = values[9];
-        ema_distance_travelled = values[10];
-        tuned_z = values[11];
-        tuned_load_scale = values[12];
-        tuned_load_bias = values[13];
-      } else {
-        std::istringstream legacy(contents);
-        std::string line;
-        while (std::getline(legacy, line)) {
-          if (line.empty() || line[0] == '#') continue;
-          size_t eq = line.find('=');
-          if (eq == std::string::npos) continue;
-          std::string key = line.substr(0, eq);
-          std::string val = line.substr(eq + 1);
-          try {
-            if (key == "sample_count")
-              motion_count = std::stoull(val);
-            else if (key == "ema_hi_ratio")
-              ema_hi_ratio = std::stod(val);
-            else if (key == "ema_saturated_ratio")
-              ema_saturated_ratio = std::stod(val);
-            else if (key == "ema_failure_ratio")
-              ema_failure_ratio = std::stod(val);
-            else if (key == "ema_time_scale")
-              ema_time_scale = std::stod(val);
-            else if (key == "ema_time_offset")
-              ema_time_offset = std::stod(val);
-            else if (key == "ema_peak_error")
-              ema_peak_error = std::stod(val);
-            else if (key == "ema_pos_error")
-              ema_pos_error = std::stod(val);
-            else if (key == "ema_vel_error")
-              ema_vel_error = std::stod(val);
-            else if (key == "ema_ff_ratio")
-              ema_control_ratio = std::stod(val);
-            else if (key == "ema_overshoot_ratio")
-              ema_overshoot = std::stod(val);
-            else if (key == "ema_settled_fraction")
-              ema_settled_fraction = std::stod(val);
-            else if (key == "ema_settling_time_s")
-              ema_settling_time = std::stod(val);
-            else if (key == "ema_oscillation_events")
-              ema_osc_events = std::stod(val);
-            else if (key == "ema_max_velocity")
-              ema_max_velocity = std::stod(val);
-            else if (key == "tuned_z_fudge")
-              tuned_z = std::stod(val);
-            else if (key == "tuned_load_scale")
-              tuned_load_scale = std::stod(val);
-            else if (key == "tuned_load_bias")
-              tuned_load_bias = std::stod(val);
-          } catch (...) { continue; }
-        }
-      }
+    if (!(in >> tuned_z >> tuned_load_scale >> tuned_friction_scale)) {
+      return;
     }
 
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      motion_count_ = motion_count;
-      ema_hi_ratio_ = ema_hi_ratio;
-      ema_saturated_ratio_ = ema_saturated_ratio;
-      ema_failure_ratio_ = ema_failure_ratio;
-      ema_time_scale_ = ema_time_scale;
-      ema_time_offset_ = ema_time_offset;
-      ema_peak_error_ = ema_peak_error;
-      ema_pos_error_ = ema_pos_error;
-      ema_vel_error_ = ema_vel_error;
-      ema_control_ratio_ = ema_control_ratio;
-      ema_distance_travelled_ = ema_distance_travelled;
-      ema_overshoot_ratio_ = ema_overshoot;
-      ema_settled_fraction_ = ema_settled_fraction;
-      ema_settling_time_s_ = ema_settling_time;
-      ema_oscillation_events_ = ema_osc_events;
-      ema_max_velocity_ = ema_max_velocity;
-      ema_initial_velocity_abs_ = ema_initial_velocity_abs;
-      ema_initial_position_offset_ = ema_initial_position_offset;
       tuned_z_fudge_ = std::clamp(tuned_z, 0.3, 3.0);
       tuned_load_scale_ = std::clamp(tuned_load_scale, 0.5, 2.0);
-      tuned_load_bias_ = std::clamp(tuned_load_bias, -5.0, 5.0);
       tuned_friction_scale_ = std::clamp(tuned_friction_scale, 0.5, 2.0);
-      dirty_ = false;
-      updates_since_save_ = 0;
     }
   };
 
@@ -812,20 +215,16 @@ inline void ICNORLearner::saveAsync() {
     if (storage_path_.empty()) return;
     path = storage_path_;
     std::ostringstream oss;
-    oss << std::setprecision(17) << ema_time_scale_ << ' ' << ema_time_offset_
-        << ' ' << tuned_z_fudge_ << ' ' << tuned_load_scale_ << ' '
-        << tuned_load_bias_ << ' ' << tuned_friction_scale_ << '\n';
+    oss << std::setprecision(17) << tuned_z_fudge_ << ' ' << tuned_load_scale_
+        << ' ' << tuned_friction_scale_ << '\n';
     data = oss.str();
   }
 
-  auto task = [this, path, data]() {
+  auto task = [path, data]() {
     std::ofstream out(path, std::ios::trunc);
-    if (out.is_open()) { out << data; }
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      dirty_ = false;
-      updates_since_save_ = 0;
-    }
+    if (!out.is_open()) { return; }
+    out << data;
+    if (!out.good()) { return; }
   };
 
   {
@@ -834,81 +233,162 @@ inline void ICNORLearner::saveAsync() {
   }
 }
 
-inline bool ICNORLearner::saveIfDirty() {
-  bool should_save = false;
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    should_save = dirty_;
-  }
-  if (should_save) { saveAsync(); }
-  waitForIO();
-  return should_save;
-}
-
-inline ICNORLearner::UpdateResult ICNORLearner::notifyOptimizationResult(
-    const ICNORLearningSample &sample,
-    const icnor_internal::ICNORTuningParameters &current_params) {
-  UpdateResult result;
-  bool should_save_now = false;
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    constexpr size_t kMinSamplesPerMotion = 2;
-    constexpr double kMinTravelDistance = 0.005;
-
-    if (motion_acc_.targetChanged(sample)) {
-      if (motion_acc_.active && motion_acc_.samples > 0) {
-        motion_acc_.finalize(false);
-      }
-      motion_acc_.begin(sample);
-    }
-
-    motion_acc_.accumulate(sample);
-
-    bool ready_to_finalize = sample.solved && !sample.saturated &&
-                             motion_acc_.samples >= kMinSamplesPerMotion;
-
-    if (ready_to_finalize) {
-      MotionMetrics metrics = motion_acc_.finalize(true);
-      bool sufficient_history =
-          metrics.samples >= kMinSamplesPerMotion &&
-          metrics.distance_travelled >= kMinTravelDistance;
-      bool qualitative_ok = metrics.completed && sufficient_history;
-
-      if (qualitative_ok) {
-        updateEMAs(metrics);
-        dirty_ = true;
-        ++updates_since_save_;
-        result.new_tuning = deriveTuningLocked(current_params);
-        if (auto_save_ && autosave_stride_ > 0 &&
-            updates_since_save_ >= autosave_stride_) {
-          should_save_now = true;
-        }
-      }
-    }
-  }
-  if (should_save_now) { saveAsync(); }
-  result.should_save = should_save_now;
-  return result;
-}
-
-inline std::optional<icnor_internal::ICNORTuningParameters>
-ICNORLearner::suggestFromHistory(
-    const icnor_internal::ICNORTuningParameters &current_params) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return deriveTuningLocked(current_params);
-}
-
 inline icnor_internal::ICNORTuningParameters
 ICNORLearner::getCurrentTuning() const {
   std::lock_guard<std::mutex> lock(mutex_);
   icnor_internal::ICNORTuningParameters params;
-  params.time_scale_factor = ema_time_scale_;
-  params.time_offset = ema_time_offset_;
   params.z_fudge = tuned_z_fudge_;
   params.load_scale = tuned_load_scale_;
-  params.load_bias = tuned_load_bias_;
   params.friction_scale = tuned_friction_scale_;
   return params;
+}
+
+inline void ICNORLearner::putLearningSample(
+    const icnor_internal::ICNORLearningSample &sample) {
+  constexpr double kDefaultTimeDelta = 0.01;
+  double time_delta = kDefaultTimeDelta;
+  if (sample_count_ == 0U) {
+    first_sample_ = sample;
+  } else {
+    time_delta = std::clamp(
+        sample.time_s - prev_sample_.time_s, 0.0, kDefaultTimeDelta * 4.0);
+  }
+
+  output_accum_ += (sample.output_raw - sample.velocity) * time_delta;
+  load_accum_ += sample.load_nm * time_delta;
+  fric_accum_sign_ += time_delta * std::tanh(sample.output_raw * 0.01);
+  prev_sample_ = sample;
+  ++sample_count_;
+
+  if (sample_count_ >= kSampleCapacity) {
+    icnor_internal::ICNORCompiledLearningSample compiled_sample;
+    compiled_sample.accum_load = load_accum_;
+    compiled_sample.accum_output_raw =
+        output_accum_ * (min_info_.tau_max / min_info_.w_f);
+    compiled_sample.accum_fric_sign = fric_accum_sign_;
+    compiled_sample.vel_mdiff = sample.velocity - first_sample_.velocity;
+    compiled_samples_.push_back(compiled_sample);
+
+    if (compiled_samples_.size() >= kCompiledSampleCapacity &&
+        (std::abs(sample.velocity / min_info_.w_f) >= 0.12 ||
+            std::abs(first_sample_.velocity / min_info_.w_f) >= 0.12)) {
+      processCompiledSamples();
+    }
+
+    sample_count_ = 0U;
+    output_accum_ = 0.0;
+    load_accum_ = 0.0;
+    fric_accum_sign_ = 0.0;
+  }
+}
+
+inline void ICNORLearner::processCompiledSamples() {
+  const size_t N = compiled_samples_.size();
+  if (N <= 3) {
+    compiled_samples_.clear();
+    return;
+  }
+
+  double Sxx = 0.0, Sxy = 0.0, Sxz = 0.0;
+  double Syy = 0.0, Syz = 0.0, Szz = 0.0;
+  double Sxq = 0.0, Syq = 0.0, Szq = 0.0;
+  double q_sum = 0.0;
+
+  for (const auto &sample : compiled_samples_) {
+    const double x = sample.accum_load;
+    const double y = sample.accum_fric_sign;
+    const double z = sample.vel_mdiff;
+    const double q = sample.accum_output_raw;
+
+    Sxx += x * x;
+    Sxy += x * y;
+    Sxz += x * z;
+    Syy += y * y;
+    Syz += y * z;
+    Szz += z * z;
+    Sxq += x * q;
+    Syq += y * q;
+    Szq += z * q;
+    q_sum += q;
+  }
+
+  const double q_mean = q_sum / N;
+
+  const double det = Sxx * (Syy * Szz - Syz * Syz) -
+                     Sxy * (Sxy * Szz - Sxz * Syz) +
+                     Sxz * (Sxy * Syz - Sxz * Syy);
+
+  if (std::abs(det) < std::numeric_limits<double>::epsilon()) {
+    compiled_samples_.clear();
+    return;
+  }
+
+  const double inv_det = 1.0 / det;
+
+  const double inv00 = (Syy * Szz - Syz * Syz) * inv_det;
+  const double inv01 = -(Sxy * Szz - Sxz * Syz) * inv_det;
+  const double inv02 = (Sxy * Syz - Sxz * Syy) * inv_det;
+  const double inv11 = (Sxx * Szz - Sxz * Sxz) * inv_det;
+  const double inv12 = -(Sxx * Syz - Sxy * Sxz) * inv_det;
+  const double inv22 = (Sxx * Syy - Sxy * Sxy) * inv_det;
+
+  const double load_scale_calc = inv00 * Sxq + inv01 * Syq + inv02 * Szq;
+  const double friction_f_calc = inv01 * Sxq + inv11 * Syq + inv12 * Szq;
+  const double J_calc = inv02 * Sxq + inv12 * Syq + inv22 * Szq;
+
+  double RSS = 0.0;
+  double TSS = 0.0;
+
+  for (const auto &sample : compiled_samples_) {
+    const double x = sample.accum_load;
+    const double y = sample.accum_fric_sign;
+    const double z = sample.vel_mdiff;
+    const double q = sample.accum_output_raw;
+
+    const double q_hat = load_scale_calc * x + friction_f_calc * y + J_calc * z;
+    const double residual = q - q_hat;
+    RSS += residual * residual;
+
+    const double q_dev = q - q_mean;
+    TSS += q_dev * q_dev;
+  }
+
+  const double R2_adj =
+      std::clamp(1.0 - ((N - 1.0) / (N - 3.0)) * (RSS / TSS), 0.0, 1.0);
+
+  if (R2_adj > 0.5) {
+    const double conf = (R2_adj - 0.5) * 2.0;
+
+    // Update friction scale
+    double friction_scale_calc = friction_f_calc / min_info_.friction_init;
+    friction_scale_calc = std::clamp(friction_scale_calc, 0.5, 2.0);
+    tuned_friction_scale_ +=
+        conf * (friction_scale_calc - tuned_friction_scale_) *
+        icnor_internal::LearningRates::kFrictionScaleLearningRate;
+    tuned_friction_scale_ = std::clamp(tuned_friction_scale_, 0.5, 2.0);
+
+    std::cout << load_scale_calc << " " << friction_scale_calc << " "
+              << std::endl;
+
+    // Update load scale
+    tuned_load_scale_ += conf * (load_scale_calc - tuned_load_scale_) *
+                         icnor_internal::LearningRates::kLoadScaleLearningRate;
+    tuned_load_scale_ = std::clamp(tuned_load_scale_, 0.5, 2.0);
+
+    // Update z fudge
+    const double z_calc = min_info_.tau_max / (min_info_.w_f * J_calc);
+    const double z_scale_calc = std::clamp(z_calc / min_info_.z_init, 0.5, 2.0);
+
+    std::cout << z_scale_calc << " " << std::endl;
+    std::cout << z_calc << " vs " << min_info_.z_init << " " << std::endl;
+    tuned_z_fudge_ += conf * (z_scale_calc - tuned_z_fudge_) *
+                      icnor_internal::LearningRates::kZLearningRate;
+    tuned_z_fudge_ = std::clamp(tuned_z_fudge_, 0.3, 3.0);
+
+    saveAsync();
+  }
+
+  compiled_samples_.clear();
 }
 
 }  // namespace pdcsu::control
@@ -916,7 +396,6 @@ ICNORLearner::getCurrentTuning() const {
 namespace pdcsu::control::icnor_internal {
 
 using ::pdcsu::control::ICNORLearner;
-using ::pdcsu::control::ICNORLearningSample;
 
 class ICNOR {
 private:
@@ -936,7 +415,6 @@ private:
 
   double z_fudge_ = 1.0;
   double load_scale_ = 1.0;
-  double load_bias_ = 0.0;
   double friction_scale_ = 1.0;
   int coarse_steps_ = 8;
   int fine_steps_ = 10;
@@ -969,6 +447,8 @@ private:
   bool last_feasible_ = true;
 
 public:
+  double getZ() const { return Z; }
+
 private:
   inline void findZ_and_inverses(double tau_max, double J, double w_f) {
     if (tau_max <= 0.0 || J <= 0.0 || w_f <= 0.0) {
@@ -1016,56 +496,11 @@ private:
 
     constexpr double kMinBaseHi = 0.15;
     base_hi = std::max(base_hi, kMinBaseHi);
-    double tuned_hi =
-        base_hi * tuning_params_.time_scale_factor + tuning_params_.time_offset;
-    tuned_hi = std::clamp(tuned_hi, 0.05, 4.0);
-    t_hi_init = tuned_hi;
+    t_hi_init = base_hi;
 
     t_lo_init = std::max(0.0, 0.5 * t_hi_init - 0.5);
     last_t_hi_init_ = t_hi_init;
     last_t_lo_init_ = t_lo_init;
-  }
-
-  inline ICNORLearningSample buildLearningSample(bool solved) const {
-    ICNORLearningSample sample;
-    const auto now = std::chrono::system_clock::now();
-    sample.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch())
-                              .count();
-    sample.target_position = T;
-    sample.target_velocity = P;
-    sample.state_position = x0;
-    sample.state_velocity = v0;
-    sample.tstar = tstar;
-    sample.zeta = zeta;
-    sample.alpha = alphaS;
-    sample.beta = betaS;
-    sample.gamma = gammaS;
-    sample.v_max = v_max;
-    sample.sysvmax = sysvmax;
-    sample.control_period = control_period;
-    sample.max_control_target = last_control_peak_;
-    sample.position_error = T - x0;
-    sample.velocity_error = P - v0;
-    sample.beta_abs = last_beta_abs_;
-    sample.gamma_abs = last_gamma_abs_;
-    sample.t_hi_init = last_t_hi_init_;
-    sample.t_lo_init = last_t_lo_init_;
-    sample.distance_to_target = (last_distance_to_target_ > 0.0)
-                                    ? last_distance_to_target_
-                                    : std::fabs(T - x0);
-    sample.saturated = last_saturated_;
-    sample.solved = solved && last_feasible_;
-    return sample;
-  }
-
-  inline void notifyLearner(bool solved) {
-    auto learner = learner_.lock();
-    if (!learner) return;
-    ICNORLearningSample sample = buildLearningSample(solved);
-    auto result = learner->notifyOptimizationResult(sample, tuning_params_);
-    if (result.new_tuning) { applyTuningParameters(*result.new_tuning); }
-    if (result.should_save) { learner->saveAsync(); }
   }
 
   // Computes the maximum control target ICNOR attempts to apply
@@ -1281,7 +716,6 @@ public:
       last_beta_abs_ = 0.0;
       last_gamma_abs_ = 0.0;
       last_saturated_ = true;
-      notifyLearner(false);
       return std::make_tuple(
           1000.0, this->zeta, this->alphaS, this->betaS, this->gammaS);
     }
@@ -1314,7 +748,6 @@ public:
     last_beta_abs_ = best_output.beta_abs;
     last_gamma_abs_ = best_output.gamma_abs;
     last_saturated_ = best_output.saturated;
-    notifyLearner(true);
     return std::make_tuple(
         this->tstar, this->zeta, this->alphaS, this->betaS, this->gammaS);
   }
@@ -1325,16 +758,12 @@ public:
 
   void applyTuningParameters(const ICNORTuningParameters &params) {
     ICNORTuningParameters tuned = params;
-    tuned.time_scale_factor = std::clamp(tuned.time_scale_factor, 0.25, 3.0);
-    tuned.time_offset = std::clamp(tuned.time_offset, -0.5, 1.5);
     tuned.z_fudge = std::clamp(tuned.z_fudge, 0.25, 3.0);
     tuned.load_scale = std::clamp(tuned.load_scale, 0.5, 2.0);
-    tuned.load_bias = std::clamp(tuned.load_bias, -5.0, 5.0);
     tuned.friction_scale = std::clamp(tuned.friction_scale, 0.5, 2.0);
     tuning_params_ = tuned;
     z_fudge_ = tuning_params_.z_fudge;
     load_scale_ = tuning_params_.load_scale;
-    load_bias_ = tuning_params_.load_bias;
     friction_scale_ = tuning_params_.friction_scale;
     recomputeZ();
     updateTimingBounds();
@@ -1514,9 +943,13 @@ public:
         learner_(nullptr),
         icnor(constructICNOR(plant.def_bldc.free_speed * 0.85)) {}
 
-  void attachLearner(std::shared_ptr<ICNORLearner> learner) {
-    learner_ = std::move(learner);
+  std::shared_ptr<ICNORLearner> attachLearner(std::string &storage_path) {
+    learner_ = std::make_shared<ICNORLearner>(
+        storage_path, ICNORLearnerMinInfo{plant.def_bldc.free_speed.value(),
+                          plant.def_bldc.stall_torque.value(), icnor->getZ(),
+                          plant.friction.value()});
     if (icnor) { icnor->attachLearner(learner_); }
+    return learner_;
   }
 
   void setConstraints(radps_t v_max, amp_t current_limit) {
@@ -1595,6 +1028,16 @@ public:
         (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, cut);
     const double accumulator_output = pos_accumulator_.update(
         pos_error, v0, control_period_sec, activation_threshold, main_output);
+
+    if (learner_) {
+      auto now = std::chrono::system_clock::now();
+      auto time_s = std::chrono::duration_cast<std::chrono::duration<double>>(
+          now.time_since_epoch())
+                        .count();
+      learner_->putLearningSample(ICNORLearningSample{x0.value(), v0.value(),
+          main_output + accumulator_output, plant.load_function(x0, v0).value(),
+          time_s});
+    }
 
     return main_output + accumulator_output;
   }

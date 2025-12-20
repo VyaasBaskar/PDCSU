@@ -65,7 +65,7 @@ struct SimHelper {
   }
 
   static radps_t vel_noise(radps_t v, radps_t v_max) {
-    return v * 0.1 * dis_vel_q(gen) + v_max * dis_vel_n(gen);
+    return v * 0.05 * dis_vel_q(gen) + v_max * dis_vel_n(gen);
   }
 
   static radian_t pos_noise() { return 1_u_rad * dis_pos_n(gen); }

@@ -59,16 +59,16 @@ Scenario make_fast_loop() {
   DefBLDC def_bldc(90_u_A, 1.2_u_A, 1.9_u_Nm, 6100_u_rpm, 12_u_V);
   DefLinearSys sys(def_bldc, 1, 90_u_rot / 0.5_u_m, 0.0_u_mps2, 2.2_u_kg, 0_u_N,
       0_u_N / 5000_u_rpm, 10_u_ms, 0.03_u_ohm);
-  return {"fast_loop", std::move(sys), 6_u_m, 0.015_u_m, 0.03_u_m,
-      5600_u_rpm, 18_u_A, 0.0_u_Nm, 520, 0.003_u_m, 0.015_u_mps, 45};
+  return {"fast_loop", std::move(sys), 6_u_m, 0.015_u_m, 0.03_u_m, 5600_u_rpm,
+      18_u_A, 0.0_u_Nm, 520, 0.003_u_m, 0.015_u_mps, 45};
 }
 
 Scenario make_dual_motor() {
   DefBLDC def_bldc(110_u_A, 1.9_u_A, 2.2_u_Nm, 5600_u_rpm, 18_u_V);
   DefLinearSys sys(def_bldc, 2, 150_u_rot / 1.0_u_m, 2.0_u_mps2, 5.0_u_kg,
       10_u_N, 0.5_u_N / 4500_u_rpm, 18_u_ms, 0.05_u_ohm);
-  return {"dual_motor", std::move(sys), 20_u_m, 0.015_u_m, 0.03_u_m,
-      3200_u_rpm, 80_u_A, 0.0_u_Nm, 680, 0.005_u_m, 0.018_u_mps, 60};
+  return {"dual_motor", std::move(sys), 20_u_m, 0.015_u_m, 0.03_u_m, 3200_u_rpm,
+      80_u_A, 0.0_u_Nm, 680, 0.005_u_m, 0.018_u_mps, 60};
 }
 
 Scenario make_high_damping() {
@@ -88,8 +88,8 @@ Scenario make_model_mismatch() {
   DefLinearSys actual_sys(actual_bldc, 2, 240_u_rot / 0.7_u_m, 7.5_u_mps2,
       8.8_u_kg, 28_u_N, 1.2_u_N / 5200_u_rpm, 12_u_ms, 0.12_u_ohm);
 
-  Scenario scenario{"model_mismatch", estimator_sys, 3_u_m, 0.03_u_m,
-      0.06_u_m, 3600_u_rpm, 30_u_A, 0.00_u_Nm, 850, 0.008_u_m, 0.020_u_mps, 70};
+  Scenario scenario{"model_mismatch", estimator_sys, 3_u_m, 0.03_u_m, 0.06_u_m,
+      3600_u_rpm, 30_u_A, 0.00_u_Nm, 850, 0.008_u_m, 0.020_u_mps, 70};
   scenario.sys = actual_sys;
   return scenario;
 }
@@ -142,10 +142,10 @@ int main() {
       auto tol_inner = scenario.sys.toNative(scenario.tol_inner_real);
       auto tol_outer = scenario.sys.toNative(scenario.tol_outer_real);
       icnor.setTolerance(tol_inner, tol_outer);
-      auto learner = std::make_shared<ICNORLearner>(
-          (results_dir / ("icnor_history_" + scenario.name)).string());
-      learner->setAutoSaveStride(60);
-      icnor.attachLearner(learner);
+      // learner->setAutoSaveStride(60);
+      std::string learner_path =
+          (results_dir / ("icnor_tuning_" + scenario.name)).string();
+      auto learner = icnor.attachLearner(learner_path);
 
       SimBLDC sim(scenario.sys);
       sim.SetCurrentLimit(scenario.current_limit);
@@ -183,7 +183,6 @@ int main() {
         std::string behavior;
         double final_pos = 0.0;
         double final_vel = 0.0;
-        bool history_saved = false;
       };
 
       std::vector<MotionReport> motion_reports;
@@ -262,15 +261,6 @@ int main() {
         report.final_pos = report.pos.empty() ? 0.0 : report.pos.back();
         report.final_vel = report.vel.empty() ? 0.0 : report.vel.back();
 
-        report.history_saved = learner->saveIfDirty();
-        if (report.history_saved) {
-          std::cout << "  [history] saved to " << learner->storagePath()
-                    << std::endl;
-        } else {
-          std::cout << "  [history] no save after motion " << (waypoint_idx + 1)
-                    << " (dirty flag not set yet)" << std::endl;
-        }
-
         std::cout << "  Motion " << (waypoint_idx + 1) << " target "
                   << target_real_value << " m => quality: " << quality
                   << ", behavior: " << behavior
@@ -298,19 +288,6 @@ int main() {
 
       double final_pos = pos_samples.empty() ? 0.0 : pos_samples.back();
       double final_vel = vel_samples.empty() ? 0.0 : vel_samples.back();
-
-      bool final_save = learner->saveIfDirty();
-      if (final_save) {
-        std::cout << "  [history] saved to " << learner->storagePath()
-                  << std::endl;
-      }
-
-      std::filesystem::path history_path(learner->storagePath());
-      if (!learner->storagePath().empty()) {
-        bool exists = std::filesystem::exists(history_path);
-        std::cout << "  History file " << (exists ? "present: " : "missing: ")
-                  << history_path.string() << std::endl;
-      }
 
       std::ofstream csv(
           results_dir / (scenario.name + ".csv"), std::ios::trunc);
