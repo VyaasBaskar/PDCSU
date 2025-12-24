@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "control/util.h"
+#include "util/math/solvers.h"
 #include "util/sysdef.h"
 
 #ifdef _WIN32
@@ -46,27 +47,27 @@ struct ICNORLearningSample {
   double velocity;
   double output_raw;
   double load_nm;
-  double time_s;
 };
 
 struct ICNORCompiledLearningSample {
-  double accum_load;
-  double accum_output_raw;
-  double accum_fric_sign;
-  double vel_mdiff;
+  double real_vel;
+  double Zterm;
+  double ZLterm;
+  double ZFterm;
 };
 
 struct ICNORLearnerMinInfo {
   double tau_max;
   double w_f;
-  double z_init;
+  double Z_init;
+  double scaling_factor;
   double friction_init;
 };
 
 struct LearningRates {
-  static constexpr double kLoadScaleLearningRate = 0.02;
-  static constexpr double kFrictionScaleLearningRate = 0.02;
-  static constexpr double kZLearningRate = 0.002;
+  static constexpr double kLoadScaleLearningRate = 0.05;
+  static constexpr double kFrictionScaleLearningRate = 0.05;
+  static constexpr double kZLearningRate = 0.01;
 };
 
 class ICNOR;
@@ -104,19 +105,15 @@ private:
   double tuned_load_scale_ = 1.0;
   double tuned_friction_scale_ = 1.0;
 
-  static inline const size_t kSampleCapacity = 15U;
+  double prev_time_s_ = 0.0;
+  double init_v_ = 0.0;
 
-  icnor_internal::ICNORLearningSample first_sample_;
-  icnor_internal::ICNORLearningSample prev_sample_;
-  size_t sample_count_ = 0U;
-
-  double output_accum_ = 0.0;
-  double load_accum_ = 0.0;
-  double fric_accum_sign_ = 0.0;
+  double accum_Zterm_v = 0.0;
+  double accum_ZLterm_v = 0.0;
+  double accum_ZFterm_v = 0.0;
 
   const icnor_internal::ICNORLearnerMinInfo min_info_;
-
-  static inline const size_t kCompiledSampleCapacity = 9U;
+  static inline const size_t kSampleWindowSize = 30U;
   std::vector<icnor_internal::ICNORCompiledLearningSample> compiled_samples_;
 };
 
@@ -124,8 +121,9 @@ inline ICNORLearner::ICNORLearner(std::string &storage_path,
     const icnor_internal::ICNORLearnerMinInfo &min_info)
     : storage_path_(ensureExtension(std::move(storage_path))),
       min_info_(min_info),
-      compiled_samples_(kCompiledSampleCapacity) {
+      compiled_samples_() {
   if (!storage_path_.empty()) { loadAsync(); }
+  compiled_samples_.reserve(kSampleWindowSize);
 }
 
 inline ICNORLearner::~ICNORLearner() { waitForIO(); }
@@ -181,15 +179,10 @@ inline void ICNORLearner::loadAsync() {
 
   auto task = [this, path]() {
     std::ifstream in(path);
-    if (!in.is_open()) { return; }
+    if (!in.is_open()) return;
 
-    double tuned_z = 1.0;
-    double tuned_load_scale = 1.0;
-    double tuned_friction_scale = 1.0;
-
-    if (!(in >> tuned_z >> tuned_load_scale >> tuned_friction_scale)) {
-      return;
-    }
+    double tuned_z = 1.0, tuned_load_scale = 1.0, tuned_friction_scale = 1.0;
+    if (!(in >> tuned_z >> tuned_load_scale >> tuned_friction_scale)) return;
 
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -222,9 +215,9 @@ inline void ICNORLearner::saveAsync() {
 
   auto task = [path, data]() {
     std::ofstream out(path, std::ios::trunc);
-    if (!out.is_open()) { return; }
+    if (!out.is_open()) return;
     out << data;
-    if (!out.good()) { return; }
+    if (!out.good()) return;
   };
 
   {
@@ -245,145 +238,72 @@ ICNORLearner::getCurrentTuning() const {
 
 inline void ICNORLearner::putLearningSample(
     const icnor_internal::ICNORLearningSample &sample) {
-  constexpr double kDefaultTimeDelta = 0.01;
-  double time_delta = kDefaultTimeDelta;
-  if (sample_count_ == 0U) {
-    first_sample_ = sample;
+  // intint (u(t)-w(t) + (frdir*F+load*L * (w_f / tau_max)))*Z
+
+  double now_s = std::chrono::duration_cast<std::chrono::duration<double>>(
+      std::chrono::steady_clock::now().time_since_epoch())
+                     .count();
+
+  double dt = std::clamp(now_s - prev_time_s_, 0.005, 0.05);
+  prev_time_s_ = now_s;
+
+  if (compiled_samples_.size() == 0) {
+    if (std::abs(sample.velocity) < min_info_.w_f * 0.05) { return; }
+    accum_Zterm_v = sample.velocity;
+    accum_ZLterm_v = 0.0;
+    accum_ZFterm_v = 0.0;
+    init_v_ = sample.velocity;
   } else {
-    time_delta = std::clamp(
-        sample.time_s - prev_sample_.time_s, 0.0, kDefaultTimeDelta * 4.0);
+    double zTermAccel =
+        std::clamp((sample.output_raw -
+                       (accum_Zterm_v + accum_ZLterm_v + accum_ZFterm_v)),
+            -min_info_.w_f, min_info_.w_f) *
+        min_info_.Z_init;
+
+    double maxZTermAccel =
+        min_info_.Z_init * min_info_.w_f * min_info_.scaling_factor;
+    accum_Zterm_v += dt * std::clamp(zTermAccel, -maxZTermAccel, maxZTermAccel);
+    accum_ZFterm_v -= dt * std::tanh(sample.velocity / min_info_.w_f * 15.0) *
+                      min_info_.Z_init * min_info_.w_f / min_info_.tau_max;
+    accum_ZLterm_v -= dt * sample.load_nm * min_info_.Z_init * min_info_.w_f /
+                      min_info_.tau_max;
   }
 
-  output_accum_ += (sample.output_raw - sample.velocity) * time_delta;
-  load_accum_ += sample.load_nm * time_delta;
-  fric_accum_sign_ += time_delta * std::tanh(sample.output_raw * 0.01);
-  prev_sample_ = sample;
-  ++sample_count_;
+  compiled_samples_.push_back(icnor_internal::ICNORCompiledLearningSample{
+      sample.velocity, accum_Zterm_v, accum_ZLterm_v, accum_ZFterm_v});
 
-  if (sample_count_ >= kSampleCapacity) {
-    icnor_internal::ICNORCompiledLearningSample compiled_sample;
-    compiled_sample.accum_load = load_accum_;
-    compiled_sample.accum_output_raw =
-        output_accum_ * (min_info_.tau_max / min_info_.w_f);
-    compiled_sample.accum_fric_sign = fric_accum_sign_;
-    compiled_sample.vel_mdiff = sample.velocity - first_sample_.velocity;
-    compiled_samples_.push_back(compiled_sample);
-
-    if (compiled_samples_.size() >= kCompiledSampleCapacity &&
-        (std::abs(sample.velocity / min_info_.w_f) >= 0.12 ||
-            std::abs(first_sample_.velocity / min_info_.w_f) >= 0.12)) {
+  if (compiled_samples_.size() >= kSampleWindowSize) {
+    if (std::abs(init_v_ - sample.velocity) > min_info_.w_f * 0.1) {
       processCompiledSamples();
     }
-
-    sample_count_ = 0U;
-    output_accum_ = 0.0;
-    load_accum_ = 0.0;
-    fric_accum_sign_ = 0.0;
+    compiled_samples_.clear();
+    accum_Zterm_v = 0.0;
+    accum_ZLterm_v = 0.0;
+    accum_ZFterm_v = 0.0;
   }
 }
 
 inline void ICNORLearner::processCompiledSamples() {
-  const size_t N = compiled_samples_.size();
-  if (N <= 3) {
-    compiled_samples_.clear();
-    return;
-  }
-
-  double Sxx = 0.0, Sxy = 0.0, Sxz = 0.0;
-  double Syy = 0.0, Syz = 0.0, Szz = 0.0;
-  double Sxq = 0.0, Syq = 0.0, Szq = 0.0;
-  double q_sum = 0.0;
-
+  std::vector<math::LS3x3::LS3x3Input> inputs;
   for (const auto &sample : compiled_samples_) {
-    const double x = sample.accum_load;
-    const double y = sample.accum_fric_sign;
-    const double z = sample.vel_mdiff;
-    const double q = sample.accum_output_raw;
-
-    Sxx += x * x;
-    Sxy += x * y;
-    Sxz += x * z;
-    Syy += y * y;
-    Syz += y * z;
-    Szz += z * z;
-    Sxq += x * q;
-    Syq += y * q;
-    Szq += z * q;
-    q_sum += q;
+    inputs.push_back(math::LS3x3::LS3x3Input{
+        sample.Zterm, sample.ZLterm, sample.ZFterm, sample.real_vel});
   }
+  auto sol = math::LS3x3::solve(inputs);
+  if (sol.r2 > 0.5) {
+    double conf = (1.0 - sol.r2) * 2.0;
 
-  const double q_mean = q_sum / N;
+    double z_new_fudge = std::clamp(sol.A, 0.25, 3.0);
+    double load_new_scale = std::clamp(sol.B, 0.5, 2.0);
+    double friction_new_scale = std::clamp(sol.C, 0.5, 2.0);
 
-  const double det = Sxx * (Syy * Szz - Syz * Syz) -
-                     Sxy * (Sxy * Szz - Sxz * Syz) +
-                     Sxz * (Sxy * Syz - Sxz * Syy);
-
-  if (std::abs(det) < std::numeric_limits<double>::epsilon()) {
-    compiled_samples_.clear();
-    return;
-  }
-
-  const double inv_det = 1.0 / det;
-
-  const double inv00 = (Syy * Szz - Syz * Syz) * inv_det;
-  const double inv01 = -(Sxy * Szz - Sxz * Syz) * inv_det;
-  const double inv02 = (Sxy * Syz - Sxz * Syy) * inv_det;
-  const double inv11 = (Sxx * Szz - Sxz * Sxz) * inv_det;
-  const double inv12 = -(Sxx * Syz - Sxy * Sxz) * inv_det;
-  const double inv22 = (Sxx * Syy - Sxy * Sxy) * inv_det;
-
-  const double load_scale_calc = inv00 * Sxq + inv01 * Syq + inv02 * Szq;
-  const double friction_f_calc = inv01 * Sxq + inv11 * Syq + inv12 * Szq;
-  const double J_calc = inv02 * Sxq + inv12 * Syq + inv22 * Szq;
-
-  double RSS = 0.0;
-  double TSS = 0.0;
-
-  for (const auto &sample : compiled_samples_) {
-    const double x = sample.accum_load;
-    const double y = sample.accum_fric_sign;
-    const double z = sample.vel_mdiff;
-    const double q = sample.accum_output_raw;
-
-    const double q_hat = load_scale_calc * x + friction_f_calc * y + J_calc * z;
-    const double residual = q - q_hat;
-    RSS += residual * residual;
-
-    const double q_dev = q - q_mean;
-    TSS += q_dev * q_dev;
-  }
-
-  const double R2_adj =
-      std::clamp(1.0 - ((N - 1.0) / (N - 3.0)) * (RSS / TSS), 0.0, 1.0);
-
-  if (R2_adj > 0.5) {
-    const double conf = (R2_adj - 0.5) * 2.0;
-
-    // Update friction scale
-    double friction_scale_calc = friction_f_calc / min_info_.friction_init;
-    friction_scale_calc = std::clamp(friction_scale_calc, 0.5, 2.0);
-    tuned_friction_scale_ +=
-        conf * (friction_scale_calc - tuned_friction_scale_) *
-        icnor_internal::LearningRates::kFrictionScaleLearningRate;
-    tuned_friction_scale_ = std::clamp(tuned_friction_scale_, 0.5, 2.0);
-
-    std::cout << load_scale_calc << " " << friction_scale_calc << " "
-              << std::endl;
-
-    // Update load scale
-    tuned_load_scale_ += conf * (load_scale_calc - tuned_load_scale_) *
-                         icnor_internal::LearningRates::kLoadScaleLearningRate;
-    tuned_load_scale_ = std::clamp(tuned_load_scale_, 0.5, 2.0);
-
-    // Update z fudge
-    const double z_calc = min_info_.tau_max / (min_info_.w_f * J_calc);
-    const double z_scale_calc = std::clamp(z_calc / min_info_.z_init, 0.5, 2.0);
-
-    std::cout << z_scale_calc << " " << std::endl;
-    std::cout << z_calc << " vs " << min_info_.z_init << " " << std::endl;
-    tuned_z_fudge_ += conf * (z_scale_calc - tuned_z_fudge_) *
+    tuned_z_fudge_ += (z_new_fudge - tuned_z_fudge_) * conf *
                       icnor_internal::LearningRates::kZLearningRate;
-    tuned_z_fudge_ = std::clamp(tuned_z_fudge_, 0.3, 3.0);
+    tuned_load_scale_ += (load_new_scale - tuned_load_scale_) * conf *
+                         icnor_internal::LearningRates::kLoadScaleLearningRate;
+    tuned_friction_scale_ +=
+        (friction_new_scale - tuned_friction_scale_) * conf *
+        icnor_internal::LearningRates::kFrictionScaleLearningRate;
 
     saveAsync();
   }
@@ -447,7 +367,9 @@ private:
   bool last_feasible_ = true;
 
 public:
-  double getZ() const { return Z; }
+  double getZ() const {
+    return tau_max_nominal_ / (inertia_nominal_ * free_speed_nominal_);
+  }
 
 private:
   inline void findZ_and_inverses(double tau_max, double J, double w_f) {
@@ -943,16 +865,22 @@ public:
         learner_(nullptr),
         icnor(constructICNOR(plant.def_bldc.free_speed * 0.85)) {}
 
+  /* NOTE: call attachLearner after setting constraints */
   std::shared_ptr<ICNORLearner> attachLearner(std::string &storage_path) {
-    learner_ = std::make_shared<ICNORLearner>(
-        storage_path, ICNORLearnerMinInfo{plant.def_bldc.free_speed.value(),
-                          plant.def_bldc.stall_torque.value(), icnor->getZ(),
-                          plant.friction.value()});
+    learner_ = std::make_shared<ICNORLearner>(storage_path,
+        ICNORLearnerMinInfo{plant.def_bldc.stall_torque.value(),
+            radps_t(plant.def_bldc.free_speed).value(), icnor->getZ(),
+            scaling_factor, plant.friction.value()});
     if (icnor) { icnor->attachLearner(learner_); }
     return learner_;
   }
 
   void setConstraints(radps_t v_max, amp_t current_limit) {
+    if (learner_) {
+      throw std::runtime_error("Call ICNORPositionControl::setConstraints "
+                               "prior to attaching ICNORLearner");
+    }
+
     this->current_limit = current_limit;
     icnor = constructICNOR(v_max);
 
@@ -1011,7 +939,8 @@ public:
 
     double orig_output = projected_output_[projection++];
 
-    const double v0_normalized = v0.value() / plant.def_bldc.free_speed.value();
+    const double v0_normalized =
+        v0.value() / radps_t(plant.def_bldc.free_speed).value();
     const double v0_abs_normalized = std::fabs(v0_normalized);
 
     const double velocity_dependent_scale =
@@ -1023,20 +952,17 @@ public:
     bool cut = hys.cut(T, x0);
     const radian_t pos_error = T - x0;
     const radian_t activation_threshold = desat_thresh * 0.5;
-    const second_t control_period_sec = second_t(plant.control_period.value());
+    const second_t control_period_sec = plant.control_period;
     const double main_output =
         (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, cut);
     const double accumulator_output = pos_accumulator_.update(
         pos_error, v0, control_period_sec, activation_threshold, main_output);
 
     if (learner_) {
-      auto now = std::chrono::system_clock::now();
-      auto time_s = std::chrono::duration_cast<std::chrono::duration<double>>(
-          now.time_since_epoch())
-                        .count();
       learner_->putLearningSample(ICNORLearningSample{x0.value(), v0.value(),
-          main_output + accumulator_output, plant.load_function(x0, v0).value(),
-          time_s});
+          (main_output + accumulator_output) *
+              radps_t(plant.def_bldc.free_speed).value(),
+          plant.load_function(x0, v0).value()});
     }
 
     return main_output + accumulator_output;

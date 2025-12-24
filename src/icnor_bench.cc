@@ -41,7 +41,7 @@ struct Scenario {
 
 Scenario make_baseline() {
   DefBLDC def_bldc(105_u_A, 1.8_u_A, 2.5_u_Nm, 5676_u_rpm);
-  DefLinearSys sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 0.0_u_mps2, 3_u_kg,
+  DefLinearSys sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 1.0_u_mps2, 3_u_kg,
       11_u_N, 0.55_u_N / 5676_u_rpm, 20_u_ms, 0.05_u_ohm);
   return {"baseline_linear", std::move(sys), 3.5_u_m, 0.015_u_m, 0.03_u_m,
       4200_u_rpm, 60_u_A, 0.0_u_Nm, 600, 0.004_u_m, 0.01_u_mps, 50};
@@ -49,7 +49,7 @@ Scenario make_baseline() {
 
 Scenario make_heavy_payload() {
   DefBLDC def_bldc(140_u_A, 2.5_u_A, 3.8_u_Nm, 5200_u_rpm, 24_u_V);
-  DefLinearSys sys(def_bldc, 1, 120_u_rot / 0.75_u_m, 0.0_u_mps2, 6.5_u_kg,
+  DefLinearSys sys(def_bldc, 1, 120_u_rot / 0.75_u_m, 2.0_u_mps2, 6.5_u_kg,
       22_u_N, 1.1_u_N / 4000_u_rpm, 25_u_ms, 0.08_u_ohm);
   return {"heavy_payload", std::move(sys), 4_u_m, 0.015_u_m, 0.03_u_m,
       3200_u_rpm, 22_u_A, 0.0_u_Nm, 700, 0.006_u_m, 0.02_u_mps, 70};
@@ -57,7 +57,7 @@ Scenario make_heavy_payload() {
 
 Scenario make_fast_loop() {
   DefBLDC def_bldc(90_u_A, 1.2_u_A, 1.9_u_Nm, 6100_u_rpm, 12_u_V);
-  DefLinearSys sys(def_bldc, 1, 90_u_rot / 0.5_u_m, 0.0_u_mps2, 2.2_u_kg, 0_u_N,
+  DefLinearSys sys(def_bldc, 1, 90_u_rot / 0.5_u_m, 2.0_u_mps2, 2.2_u_kg, 0_u_N,
       0_u_N / 5000_u_rpm, 10_u_ms, 0.03_u_ohm);
   return {"fast_loop", std::move(sys), 6_u_m, 0.015_u_m, 0.03_u_m, 5600_u_rpm,
       18_u_A, 0.0_u_Nm, 520, 0.003_u_m, 0.015_u_mps, 45};
@@ -130,7 +130,7 @@ int main() {
 
   std::cout << "Running " << scenarios.size() << " scenarios..." << std::endl;
 
-  std::cout << std::fixed << std::setprecision(3);
+  std::cout << std::fixed << std::setprecision(5);
 
   for (auto &scenario : scenarios) {
     std::cout << "\n=== " << scenario.name << " ===" << std::endl;
