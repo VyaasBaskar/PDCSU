@@ -18,8 +18,20 @@ if "%~1"=="" (
 %PS% "Write-Host 'Creating build directory...' -ForegroundColor Green"
 if not exist build mkdir build
 
-%PS% "Write-Host 'Generating pdcsu.pch...' -ForegroundColor Green"
-clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu.h -o build/pdcsu.pch
+%PS% "Write-Host 'Generating pdcsu_units.pch...' -ForegroundColor Green"
+clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_units.h -o build/pdcsu_units.pch
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+%PS% "Write-Host 'Generating pdcsu_math.pch...' -ForegroundColor Green"
+clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_math.h -o build/pdcsu_math.pch
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+%PS% "Write-Host 'Generating pdcsu_control.pch...' -ForegroundColor Green"
+clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_control.h -o build/pdcsu_control.pch
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+%PS% "Write-Host 'Generating pdcsu_sim.pch...' -ForegroundColor Green"
+clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_sim.h -o build/pdcsu_sim.pch
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 set "release_temp=build\%release_zip%_tmp"
@@ -34,7 +46,10 @@ mkdir "%release_temp%\%release_folder%"
 robocopy include "%release_temp%\%release_folder%" /E /NFL /NDL /NJH /NJS /NC /NS /NP >nul
 if %errorlevel% geq 8 exit /b %errorlevel%
 
-copy /Y build\pdcsu.pch "%release_temp%\%release_folder%\pdcsu.pch" >nul
+copy /Y build\pdcsu_units.pch "%release_temp%\%release_folder%\pdcsu_units.pch" >nul
+copy /Y build\pdcsu_math.pch "%release_temp%\%release_folder%\pdcsu_math.pch" >nul
+copy /Y build\pdcsu_control.pch "%release_temp%\%release_folder%\pdcsu_control.pch" >nul
+copy /Y build\pdcsu_sim.pch "%release_temp%\%release_folder%\pdcsu_sim.pch" >nul
 
 %PS% "Write-Host 'Creating archive %zip_dest% with release_folder=%release_folder%' -ForegroundColor Green"
 %PS% "Compress-Archive -Path \"%release_temp%\%release_folder%\" -DestinationPath \"%zip_dest%\" -Force"
@@ -45,5 +60,5 @@ if %errorlevel% neq 0 (
 
 rd /s /q "%release_temp%"
 
-%PS% "Write-Host 'Precompiled header ready at build/pdcsu.pch and release archive %zip_dest%' -ForegroundColor Green"
+%PS% "Write-Host 'Precompiled headers ready in build/ and release archive %zip_dest%' -ForegroundColor Green"
 endlocal
