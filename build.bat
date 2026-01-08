@@ -18,20 +18,36 @@ if "%~1"=="" (
 %PS% "Write-Host 'Creating build directory...' -ForegroundColor Green"
 if not exist build mkdir build
 
-%PS% "Write-Host 'Generating pdcsu_units.pch...' -ForegroundColor Green"
+%PS% "Write-Host 'Generating pdcsu_units.pch (Clang)...' -ForegroundColor Green"
 clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_units.h -o build/pdcsu_units.pch
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-%PS% "Write-Host 'Generating pdcsu_math.pch...' -ForegroundColor Green"
+%PS% "Write-Host 'Generating pdcsu_units.h.gch (GCC)...' -ForegroundColor Green"
+g++ -std=c++17 -x c++-header -Iinclude include/pdcsu_units.h -o build/pdcsu_units.h.gch
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+%PS% "Write-Host 'Generating pdcsu_math.pch (Clang)...' -ForegroundColor Green"
 clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_math.h -o build/pdcsu_math.pch
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-%PS% "Write-Host 'Generating pdcsu_control.pch...' -ForegroundColor Green"
+%PS% "Write-Host 'Generating pdcsu_math.h.gch (GCC)...' -ForegroundColor Green"
+g++ -std=c++17 -x c++-header -Iinclude include/pdcsu_math.h -o build/pdcsu_math.h.gch
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+%PS% "Write-Host 'Generating pdcsu_control.pch (Clang)...' -ForegroundColor Green"
 clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_control.h -o build/pdcsu_control.pch
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-%PS% "Write-Host 'Generating pdcsu_sim.pch...' -ForegroundColor Green"
+%PS% "Write-Host 'Generating pdcsu_control.h.gch (GCC)...' -ForegroundColor Green"
+g++ -std=c++17 -x c++-header -Iinclude include/pdcsu_control.h -o build/pdcsu_control.h.gch
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+%PS% "Write-Host 'Generating pdcsu_sim.pch (Clang)...' -ForegroundColor Green"
 clang++ -std=c++17 -x c++-header -Iinclude include/pdcsu_sim.h -o build/pdcsu_sim.pch
+if %errorlevel% neq 0 exit /b %errorlevel%
+
+%PS% "Write-Host 'Generating pdcsu_sim.h.gch (GCC)...' -ForegroundColor Green"
+g++ -std=c++17 -x c++-header -Iinclude include/pdcsu_sim.h -o build/pdcsu_sim.h.gch
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 set "release_temp=build\%release_zip%_tmp"
@@ -47,9 +63,13 @@ robocopy include "%release_temp%\%release_folder%" /E /NFL /NDL /NJH /NJS /NC /N
 if %errorlevel% geq 8 exit /b %errorlevel%
 
 copy /Y build\pdcsu_units.pch "%release_temp%\%release_folder%\pdcsu_units.pch" >nul
+copy /Y build\pdcsu_units.h.gch "%release_temp%\%release_folder%\pdcsu_units.h.gch" >nul
 copy /Y build\pdcsu_math.pch "%release_temp%\%release_folder%\pdcsu_math.pch" >nul
+copy /Y build\pdcsu_math.h.gch "%release_temp%\%release_folder%\pdcsu_math.h.gch" >nul
 copy /Y build\pdcsu_control.pch "%release_temp%\%release_folder%\pdcsu_control.pch" >nul
+copy /Y build\pdcsu_control.h.gch "%release_temp%\%release_folder%\pdcsu_control.h.gch" >nul
 copy /Y build\pdcsu_sim.pch "%release_temp%\%release_folder%\pdcsu_sim.pch" >nul
+copy /Y build\pdcsu_sim.h.gch "%release_temp%\%release_folder%\pdcsu_sim.h.gch" >nul
 
 %PS% "Write-Host 'Creating archive %zip_dest% with release_folder=%release_folder%' -ForegroundColor Green"
 %PS% "Compress-Archive -Path \"%release_temp%\%release_folder%\" -DestinationPath \"%zip_dest%\" -Force"
@@ -60,5 +80,5 @@ if %errorlevel% neq 0 (
 
 rd /s /q "%release_temp%"
 
-%PS% "Write-Host 'Precompiled headers ready in build/ and release archive %zip_dest%' -ForegroundColor Green"
+%PS% "Write-Host 'Precompiled headers (PCH and GCH) ready in build/ and release archive %zip_dest%' -ForegroundColor Green"
 endlocal

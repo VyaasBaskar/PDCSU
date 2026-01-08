@@ -9,7 +9,7 @@
 #include "util/sysdef.h"
 #include "util/units.h"
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 #include <corecrt_math_defines.h>
 #endif
 
@@ -47,7 +47,7 @@ struct SimHelper {
     auto conv_rate = torque_limited / (inertia * radps_t(def_bldc.free_speed));
 
     return w_conv +
-           (v0 - w_conv) * std::pow(M_E, -conv_rate.value() * dt.value());
+           (v0 - w_conv) * std::exp(-conv_rate.value() * dt.value());
   }
 
   static radian_t predict_position(
