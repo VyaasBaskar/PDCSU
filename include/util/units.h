@@ -587,6 +587,35 @@ public:
     return base_value_ >= o.to_base();
   }
 
+  template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
+      typename R2, typename LTag2, typename MTag2, typename TTag2,
+      typename ITag2, typename RTag2>
+  constexpr Unit operator%(
+      const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
+          &o) const {
+    using __pdcsu_units_lhs_dims [[maybe_unused]] =
+        DimensionSummary<L_exp, M_exp, T_exp, I_exp, R_exp>;
+    using __pdcsu_units_rhs_dims [[maybe_unused]] =
+        DimensionSummary<L2, M2, T2, I2, R2>;
+    using __pdcsu_units_lhs_tags [[maybe_unused]] =
+        TagSummary<L_tag, M_tag, T_tag, I_tag, R_tag>;
+    using __pdcsu_units_rhs_tags [[maybe_unused]] =
+        TagSummary<LTag2, MTag2, TTag2, ITag2, RTag2>;
+    static_assert(same_dimensions<L2, M2, T2, I2, R2>(),
+        "pdcsu::units::Unit::operator% requires matching (L,M,T,I,R); compare "
+        "__pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
+        "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
+    return Unit(std::fmod(value(), o.value()));
+  }
+
+  constexpr Unit operator%(int s) const {
+    return Unit(std::fmod(value(), static_cast<double>(s)));
+  }
+
+  constexpr Unit operator%(double s) const {
+    return Unit(std::fmod(value(), s));
+  }
+
   friend constexpr Unit operator*(double lhs, const Unit &rhs) {
     return Unit::from_base(lhs * rhs.to_base());
   }
@@ -727,6 +756,53 @@ constexpr auto u_pow(
     double exp) {
   return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
       std::pow(u.to_base(), exp));
+}
+
+// Floor operation
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+static inline Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_floor(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u) {
+  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+      std::floor(u.to_base()));
+}
+
+// Ceiling operation
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+static inline Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_ceil(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u) {
+  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+      std::ceil(u.to_base()));
+}
+
+// Round
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+static inline Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> u_round(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u) {
+  return Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag>::from_base(
+      std::round(u.to_base()));
+}
+
+// Square root
+template <typename Fac, typename L, typename M, typename T, typename I,
+    typename R, typename LTag, typename MTag, typename TTag, typename ITag,
+    typename RTag>
+constexpr auto u_sqrt(
+    const Unit<Fac, L, M, T, I, R, LTag, MTag, TTag, ITag, RTag> &u) {
+  using ResultL = detail::fraction_multiply_t<L, detail::Fraction<1, 2>>;
+  using ResultM = detail::fraction_multiply_t<M, detail::Fraction<1, 2>>;
+  using ResultT = detail::fraction_multiply_t<T, detail::Fraction<1, 2>>;
+  using ResultI = detail::fraction_multiply_t<I, detail::Fraction<1, 2>>;
+  using ResultR = detail::fraction_multiply_t<R, detail::Fraction<1, 2>>;
+  using ResultUnit = Unit<Fac, ResultL, ResultM, ResultT, ResultI, ResultR,
+      LTag, MTag, TTag, ITag, RTag>;
+  const double sqrt_factor = std::sqrt(Fac::num * 1.0 / Fac::den);
+  return ResultUnit::from_base(std::sqrt(u.to_base()) * sqrt_factor);
 }
 
 // Copysign

@@ -1,3 +1,5 @@
+#include "util/units.h"
+
 #include <chrono>
 #include <cmath>
 #include <initializer_list>
@@ -5,8 +7,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-
-#include "util/units.h"
 
 using namespace pdcsu::units;
 
@@ -75,11 +75,12 @@ void test_arithmetic_operations() {
   expect_near(diff.value(), 1.5, kEpsilon, "Subtraction of meter_t failed");
 
   auto scaled = a * 3.0;
-  expect_near(scaled.value(), 6.0, kEpsilon, "Scaling meter_t by scalar failed");
+  expect_near(
+      scaled.value(), 6.0, kEpsilon, "Scaling meter_t by scalar failed");
 
   auto scaled_left = 3.0 * a;
-  expect_near(scaled_left.value(), 6.0, kEpsilon,
-      "Left scalar multiplication failed");
+  expect_near(
+      scaled_left.value(), 6.0, kEpsilon, "Left scalar multiplication failed");
 
   auto divided = b / 2.0;
   expect_near(divided.value(), 1.75, kEpsilon, "Division by scalar failed");
@@ -99,8 +100,7 @@ void test_arithmetic_operations() {
   auto area = 2.0_u_m * 3.0_u_m;
   expect_near(area.value(), 6.0, kEpsilon,
       "Area magnitude mismatch for meter multiplication");
-  expect_equal(area.dims(), "m^2",
-      "Area dims() should reflect squared length");
+  expect_equal(area.dims(), "m^2", "Area dims() should reflect squared length");
 
   auto torque = 4.0_u_N * 0.5_u_m;
   expect_near(torque.value(), 2.0, kEpsilon,
@@ -130,16 +130,14 @@ void test_comparisons() {
   meter_t three(3.0);
 
   expect_true(two_a == two_b, "Equal meter_t instances should compare equal");
-  expect_true(two_a != three,
-      "Different magnitudes should not compare equal");
+  expect_true(two_a != three, "Different magnitudes should not compare equal");
   expect_true(three > two_a, "Greater magnitude should compare larger");
   expect_true(two_a < three, "Smaller magnitude should compare smaller");
   expect_true(three >= two_b, "Greater-or-equal comparison failed");
   expect_true(two_b <= three, "Less-or-equal comparison failed");
 
   auto copy = meter_t::from_base(two_a.to_base());
-  expect_true(copy == two_a,
-      "Constructing from base should preserve equality");
+  expect_true(copy == two_a, "Constructing from base should preserve equality");
 }
 
 void test_utility_functions() {
@@ -173,6 +171,94 @@ void test_utility_functions() {
 
   auto max_val = u_max(4.0_u_m, 8.0_u_m);
   expect_near(max_val.value(), 8.0, kEpsilon, "u_max should pick the larger");
+
+  // Floor operation
+  auto floor_positive = u_floor(3.7_u_m);
+  expect_near(floor_positive.value(), 3.0, kEpsilon,
+      "u_floor should round down positive values");
+
+  auto floor_negative = u_floor(-3.7_u_m);
+  expect_near(floor_negative.value(), -4.0, kEpsilon,
+      "u_floor should round down negative values");
+
+  auto floor_exact = u_floor(5.0_u_m);
+  expect_near(floor_exact.value(), 5.0, kEpsilon,
+      "u_floor should preserve exact integer values");
+
+  // Ceiling operation
+  auto ceil_positive = u_ceil(3.2_u_m);
+  expect_near(ceil_positive.value(), 4.0, kEpsilon,
+      "u_ceil should round up positive values");
+
+  auto ceil_negative = u_ceil(-3.2_u_m);
+  expect_near(ceil_negative.value(), -3.0, kEpsilon,
+      "u_ceil should round up negative values");
+
+  auto ceil_exact = u_ceil(5.0_u_m);
+  expect_near(ceil_exact.value(), 5.0, kEpsilon,
+      "u_ceil should preserve exact integer values");
+
+  // Round operation
+  auto round_up = u_round(3.6_u_m);
+  expect_near(
+      round_up.value(), 4.0, kEpsilon, "u_round should round up values >= 0.5");
+
+  auto round_down = u_round(3.4_u_m);
+  expect_near(round_down.value(), 3.0, kEpsilon,
+      "u_round should round down values < 0.5");
+
+  auto round_half = u_round(3.5_u_m);
+  expect_near(round_half.value(), 4.0, kEpsilon, "u_round should round 0.5 up");
+
+  auto round_negative = u_round(-3.6_u_m);
+  expect_near(round_negative.value(), -4.0, kEpsilon,
+      "u_round should round negative values correctly");
+
+  // Modulo operation - unit % unit
+  auto mod_unit = 10.0_u_m % 3.0_u_m;
+  expect_near(mod_unit.value(), 1.0, kEpsilon,
+      "Unit modulo unit should compute remainder correctly");
+
+  auto mod_unit_exact = 9.0_u_m % 3.0_u_m;
+  expect_near(mod_unit_exact.value(), 0.0, kEpsilon,
+      "Unit modulo unit should return zero for exact division");
+
+  // Modulo operation - unit % int
+  auto mod_int = 10.0_u_m % 3;
+  expect_near(mod_int.value(), 1.0, kEpsilon,
+      "Unit modulo int should compute remainder correctly");
+
+  auto mod_int_exact = 12.0_u_m % 4;
+  expect_near(mod_int_exact.value(), 0.0, kEpsilon,
+      "Unit modulo int should return zero for exact division");
+
+  // Modulo operation - unit % double
+  auto mod_double = 14.0_u_m % 10.5;
+  expect_near(mod_double.value(), 3.5, kEpsilon,
+      "Unit modulo double should compute remainder correctly");
+
+  auto mod_double_exact = 10.0_u_m % 2.5;
+  expect_near(mod_double_exact.value(), 0.0, kEpsilon,
+      "Unit modulo double should return zero for exact division");
+
+  // Square root operation
+  auto sqrt_simple = u_sqrt(9.0_u_m * 1.0_u_m);
+  expect_near(sqrt_simple.value(), 3.0, kEpsilon,
+      "u_sqrt should compute square root of area to get length");
+
+  auto sqrt_fractional = u_sqrt(2.25_u_m * 1.0_u_m);
+  expect_near(sqrt_fractional.value(), 1.5, kEpsilon,
+      "u_sqrt should handle fractional results correctly");
+
+  auto sqrt_velocity_squared = u_sqrt(16.0_u_mps * 1.0_u_mps);
+  expect_near(sqrt_velocity_squared.value(), 4.0, kEpsilon,
+      "u_sqrt should work with derived units");
+
+  // Verify sqrt dimensions are halved
+  auto area = 4.0_u_m * 4.0_u_m;
+  auto sqrt_area = u_sqrt(area);
+  expect_equal(sqrt_area.dims(), "m",
+      "u_sqrt should halve dimension exponents (area -> length)");
 }
 
 void test_trigonometric_functions() {
@@ -180,10 +266,10 @@ void test_trigonometric_functions() {
   constexpr double kTrigTolerance = 1e-6;
 
   auto zero = 0.0_u_rad;
-  expect_near(u_sin(zero), 0.0, kEpsilon,
-      "u_sin should match std::sin for radians");
-  expect_near(u_cos(zero), 1.0, kEpsilon,
-      "u_cos should match std::cos for radians");
+  expect_near(
+      u_sin(zero), 0.0, kEpsilon, "u_sin should match std::sin for radians");
+  expect_near(
+      u_cos(zero), 1.0, kEpsilon, "u_cos should match std::cos for radians");
 
   auto ninety_deg = 90.0_u_deg;
   expect_near(u_sin(ninety_deg), 1.0, kTrigTolerance,
@@ -215,8 +301,8 @@ void test_literal_conversions() {
   expect_equal(inch.dims(), "in", "inch_t dims() should report \"in\"");
 
   auto foot = foot_t(12.0_u_in);
-  expect_near(foot.value(), 1.0, kEpsilon,
-      "12 inches should equal 1 foot in value()");
+  expect_near(
+      foot.value(), 1.0, kEpsilon, "12 inches should equal 1 foot in value()");
   expect_equal(foot.dims(), "ft", "foot_t dims() should report \"ft\"");
 
   auto pound = 1.0_u_lb;
@@ -232,12 +318,12 @@ void test_literal_conversions() {
   auto rpm = 60.0_u_rpm;
   expect_near(rpm.to_base(), 2.0 * kPi, 5e-5,
       "60 RPM should equal 2*pi rad/s in base units");
-  expect_equal(rpm.dims(), "min^-1 rot",
-      "rpm_t dims() should be rotation per minute");
+  expect_equal(
+      rpm.dims(), "min^-1 rot", "rpm_t dims() should be rotation per minute");
 
   auto radps = radps_t(2.0);
-  expect_equal(radps.dims(), "s^-1 rad",
-      "radps_t dims() should be radians per second");
+  expect_equal(
+      radps.dims(), "s^-1 rad", "radps_t dims() should be radians per second");
 
   auto degps2 = 30.0_u_degps2;
   expect_equal(degps2.dims(), "s^-2 deg",
@@ -251,7 +337,8 @@ void test_dimension_tagging() {
 
   auto mixed_area = 1.0_u_ft * 1.0_u_m;
   expect_equal(mixed_area.dims(), "m^2",
-      "Mixed metric/imperial length multiplication should resolve to mixed metric tag");
+      "Mixed metric/imperial length multiplication should resolve to mixed "
+      "metric tag");
 
   auto total_length = 1.0_u_m + 3.0_u_ft;
   expect_equal(total_length.dims(), "m",
@@ -266,28 +353,26 @@ void test_compound_units() {
   auto force = mass * accel;
   expect_equal(force.dims(), "m kg s^-2",
       "Force should have dimensions of mass*length/time^2");
-  expect_near(force.value(), 6.0, kEpsilon,
-      "2 kg * 3 m/s^2 should equal 6 newtons");
+  expect_near(
+      force.value(), 6.0, kEpsilon, "2 kg * 3 m/s^2 should equal 6 newtons");
 
   auto distance = 5.0_u_m;
   auto work = force * distance;
   expect_equal(work.dims(), "m^2 kg s^-2",
       "Work should have dimensions of mass*length^2/time^2");
-  expect_near(work.value(), 30.0, kEpsilon,
-      "6 N * 5 m should equal 30 joules");
+  expect_near(work.value(), 30.0, kEpsilon, "6 N * 5 m should equal 30 joules");
 
   auto power = work / 2.0_u_s;
   expect_equal(power.dims(), "m^2 kg s^-3",
       "Power should have dimensions of joules per second");
-  expect_near(power.value(), 15.0, kEpsilon,
-      "30 J / 2 s should equal 15 watts");
+  expect_near(
+      power.value(), 15.0, kEpsilon, "30 J / 2 s should equal 15 watts");
 
   auto frequency = 2.0_u_Hz;
   auto period = scalar_t(1.0) / frequency;
-  expect_equal(period.dims(), "s",
-      "Inverse of frequency should yield seconds");
-  expect_near(period.value(), 0.5, kEpsilon,
-      "1 / 2 Hz should equal 0.5 seconds");
+  expect_equal(period.dims(), "s", "Inverse of frequency should yield seconds");
+  expect_near(
+      period.value(), 0.5, kEpsilon, "1 / 2 Hz should equal 0.5 seconds");
 }
 
 void test_performance_benchmark() {
@@ -317,11 +402,11 @@ void test_performance_benchmark() {
   expect_near(unit_val.value(), double_val, 1e-9,
       "Unit and double computations should yield equivalent magnitudes");
 
-  auto unit_ns =
-      std::chrono::duration_cast<std::chrono::nanoseconds>(unit_end - unit_start)
-          .count();
+  auto unit_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      unit_end - unit_start)
+                     .count();
   auto double_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                        double_end - double_start)
+      double_end - double_start)
                        .count();
 
   expect_true(unit_ns > 0, "Measured unit duration must be positive");
@@ -334,8 +419,8 @@ void test_performance_benchmark() {
       static_cast<double>(double_ns) / (ops_per_iteration * iterations);
 
   std::cout << "[INFO] (Avg time per operation) <Units>: " << unit_avg_ns
-            << " ns, <Doubles>: " << double_avg_ns << " ns, ratio: "
-            << (unit_avg_ns / double_avg_ns) << '\n';
+            << " ns, <Doubles>: " << double_avg_ns
+            << " ns, ratio: " << (unit_avg_ns / double_avg_ns) << '\n';
 }
 
 }  // namespace
@@ -369,8 +454,7 @@ int main() {
     }
   }
 
-  const auto total =
-      static_cast<int>(sizeof(tests) / sizeof(TestCase));
+  const auto total = static_cast<int>(sizeof(tests) / sizeof(TestCase));
   if (failures > 0) {
     std::cerr << failures << " of " << total << " test(s) failed.\n";
     return 1;
@@ -379,4 +463,3 @@ int main() {
   std::cout << "All " << total << " test(s) passed.\n";
   return 0;
 }
-
