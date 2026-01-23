@@ -215,13 +215,9 @@ public:
   [[nodiscard]] pdcsu::units::degree_t angle(
       bool angleIsBearing = false) const {
     assert(N == 2 && "Angle can only be calculated for 2D vectors.");
-    if (angleIsBearing) {
-      auto rad = pdcsu::units::u_atan2(data[0], data[1]);
-      return pdcsu::units::degree_t(rad.to_base());
-    }
+    if (angleIsBearing) { return pdcsu::units::u_atan2(data[0], data[1]); }
     try {
-      auto rad = pdcsu::units::u_atan2(data[1], data[0]);
-      return pdcsu::units::degree_t(rad.to_base());
+      return pdcsu::units::u_atan2(data[1], data[0]);
     } catch (std::exception& exc) {
       (void)exc;
       return 0_u_deg;
