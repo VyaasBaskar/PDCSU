@@ -54,7 +54,7 @@ if %errorlevel% neq 0 (
   exit /b 1
 )
 
-  %PS% "Write-Host 'Publishing GitHub release %release_tag%...' -ForegroundColor Green"
+%PS% "Write-Host 'Publishing GitHub release %release_tag%...' -ForegroundColor Green"
 gh release view "%release_tag%" >nul 2>&1
 if %errorlevel% equ 0 (
   %PS% "Write-Host 'Release already exists; deleting old tag %release_tag%...' -ForegroundColor Yellow"
@@ -65,11 +65,31 @@ if %errorlevel% equ 0 (
   )
 )
 
-gh release create "%release_tag%" "build\%release_zip%.zip" --title "%release_tag%" --notes "Automated release for %release_tag%" --target "%current_branch%"
+%PS% "Write-Host 'Creating release %release_tag%...' -ForegroundColor Green"
+gh release create "%release_tag%" --title "%release_tag%" --notes "Automated release for %release_tag%" --target "%current_branch%"
 if %errorlevel% neq 0 (
   %PS% "Write-Host 'gh release create failed.' -ForegroundColor Red"
   exit /b %errorlevel%
 )
+
+%PS% "Write-Host 'Uploading release asset (with retry logic)...' -ForegroundColor Green"
+set "retry_count=0"
+set "max_retries=3"
+:upload_asset
+gh release upload "%release_tag%" "build\%release_zip%.zip" --clobber
+if %errorlevel% equ 0 (
+  goto :upload_success
+)
+set /a retry_count+=1
+if %retry_count% lss %max_retries% (
+  %PS% "Write-Host 'Upload failed (attempt %retry_count%/%max_retries%), retrying in 5 seconds...' -ForegroundColor Yellow"
+  timeout /t 5 /nobreak >nul
+  goto :upload_asset
+)
+%PS% "Write-Host 'Failed to upload asset after %max_retries% attempts. Release created but asset upload failed.' -ForegroundColor Red"
+%PS% "Write-Host 'You can manually upload build\%release_zip%.zip to the release.' -ForegroundColor Yellow"
+exit /b 1
+:upload_success
 
 %PS% "Write-Host 'Deploy complete. Release available at https://github.com/VyaasBaskar/PDCSU/releases/tag/%release_tag%' -ForegroundColor Green"
 
