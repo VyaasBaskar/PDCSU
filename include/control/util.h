@@ -14,7 +14,7 @@ class FFModel {
 private:
   BasePlant base_plant;
   ohm_t ir;
-  radps_t omega_max_ = 600.0_u_radps;
+  radps_t omega_max_ = 600.0_radps_;
   UnitDivision<scalar_t, nm_t> velFF_conversion;
   double load_scale_ = 1.0;
   double load_bias_nm_ = 0.0;
@@ -41,17 +41,17 @@ public:
     viscous_load = u_copysign(viscous_load, omega);
 
     nm_t total_external = load + viscous_load;
-    nm_t friction_load = 0.0_u_Nm;
+    nm_t friction_load = 0.0_Nm_;
 
     if (!cut) {
       friction_load = base_plant.friction * friction_scale_ *
-                      u_tanh(1_u_rad * 2.0 * omega /
+                      u_tanh(1_rad_ * 2.0 * omega /
                              omega_max_);  // Magic number 2.0 adjusted to
                                            // match experimental data
     }
 
     nm_t total_load = total_external + friction_load;
-    nm_t adjusted_nm = total_load * load_scale_ + load_bias_nm_ * 1_u_Nm;
+    nm_t adjusted_nm = total_load * load_scale_ + load_bias_nm_ * 1_Nm_;
 
     return (adjusted_nm * velFF_conversion).value();
   }
@@ -85,23 +85,23 @@ public:
 
 class PositionErrorAccumulator {
 private:
-  UnitCompound<radian_t, second_t> integral_ = 0.0_u_rad * 0.0_u_s;
-  UnitCompound<radian_t, second_t> max_integral_ = 0.04_u_rad * 0.0_u_s;
+  UnitCompound<radian_t, second_t> integral_ = 0.0_rad_ * 0.0_s_;
+  UnitCompound<radian_t, second_t> max_integral_ = 0.04_rad_ * 0.0_s_;
   double max_output_ = 0.04;
-  second_t kD = 0.007_u_s;
+  second_t kD = 0.007_s_;
 
 public:
   PositionErrorAccumulator() = default;
 
   void setMaxOutput(double max_output) {
     max_output_ = std::abs(max_output);
-    max_integral_ = max_output_ * 1.5_u_rad * 1_u_s;
+    max_integral_ = max_output_ * 1.5_rad_ * 1_s_;
   }
   double update(radian_t position_error, radps_t current_velocity,
       second_t control_period, radian_t activation_threshold,
       double main_controller_output = 0.0) {
     if (std::abs(main_controller_output) > 1.5 * max_output_) {
-      integral_ = 0.0_u_rad * 0.0_u_s;
+      integral_ = 0.0_rad_ * 0.0_s_;
       return 0.0;
     }
     position_error -= current_velocity * kD;
@@ -109,15 +109,15 @@ public:
     integral_ = std::clamp(integral_, -max_integral_, max_integral_);
     if (position_error > activation_threshold)
       integral_ *=
-          1 - std::abs(u_tanh(1_u_rad * position_error / activation_threshold));
+          1 - std::abs(u_tanh(1_rad_ * position_error / activation_threshold));
     else
       integral_ *=
-          std::abs(u_tanh(1_u_rad * position_error / activation_threshold));
+          std::abs(u_tanh(1_rad_ * position_error / activation_threshold));
 
     return std::clamp(integral_.value(), -max_output_, max_output_);
   }
 
-  void reset() { integral_ = 0.0_u_rad * 0.0_u_s; }
+  void reset() { integral_ = 0.0_rad_ * 0.0_s_; }
 
   double getIntegral() const { return integral_.value(); }
 };

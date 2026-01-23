@@ -841,7 +841,7 @@ private:
 
   amp_t current_limit;
   double scaling_factor = 1.0;
-  radian_t desat_thresh = 15.0_u_rad;
+  radian_t desat_thresh = 15.0_rad_;
   double inner_desat = 0.45;
 
   std::shared_ptr<ICNORLearner> learner_;
@@ -849,8 +849,8 @@ private:
 
   unsigned int projection_horizon = 3U;
 
-  radian_t T_ = 0_u_rad;
-  radps_t P_ = 0_u_radps;
+  radian_t T_ = 0_rad_;
+  radps_t P_ = 0_radps_;
 
   std::vector<double> projected_output_;
 
@@ -860,7 +860,7 @@ public:
   ICNORPositionControl(BasePlant plant)
       : plant(plant),
         ffModel(plant),
-        hys(0.02_u_rad, 0.05_u_rad),
+        hys(0.02_rad_, 0.05_rad_),
         current_limit(plant.def_bldc.stall_current),
         learner_(nullptr),
         icnor(constructICNOR(plant.def_bldc.free_speed * 0.85)) {}
@@ -906,7 +906,7 @@ public:
   }
 
   void setDesaturationThresh(radian_t thresh, double inner_desat_frac = 0.45) {
-    desat_thresh = std::clamp(thresh, 0.0_u_rad, 35.0_u_rad);
+    desat_thresh = std::clamp(thresh, 0.0_rad_, 35.0_rad_);
     inner_desat = std::clamp(inner_desat_frac, 0.0, 1.0);
   }
 

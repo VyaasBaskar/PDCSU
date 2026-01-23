@@ -40,56 +40,56 @@ struct Scenario {
 };
 
 Scenario make_baseline() {
-  DefBLDC def_bldc(105_u_A, 1.8_u_A, 2.5_u_Nm, 5676_u_rpm);
-  DefLinearSys sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 1.0_u_mps2, 3_u_kg,
-      11_u_N, 0.55_u_N / 5676_u_rpm, 20_u_ms, 0.05_u_ohm);
-  return {"baseline_linear", std::move(sys), 3.5_u_m, 0.015_u_m, 0.03_u_m,
-      4200_u_rpm, 60_u_A, 0.0_u_Nm, 600, 0.004_u_m, 0.01_u_mps, 50};
+  DefBLDC def_bldc(105_A_, 1.8_A_, 2.5_Nm_, 5676_rpm_);
+  DefLinearSys sys(def_bldc, 1, 214.85_rot_ / 262.5_in_, 1.0_mps2_, 3_kg_,
+      11_N_, 0.55_N_ / 5676_rpm_, 20_ms_, 0.05_ohm_);
+  return {"baseline_linear", std::move(sys), 3.5_m_, 0.015_m_, 0.03_m_,
+      4200_rpm_, 60_A_, 0.0_Nm_, 600, 0.004_m_, 0.01_m_ps, 50};
 }
 
 Scenario make_heavy_payload() {
-  DefBLDC def_bldc(140_u_A, 2.5_u_A, 3.8_u_Nm, 5200_u_rpm, 24_u_V);
-  DefLinearSys sys(def_bldc, 1, 120_u_rot / 0.75_u_m, 2.0_u_mps2, 6.5_u_kg,
-      22_u_N, 1.1_u_N / 4000_u_rpm, 25_u_ms, 0.08_u_ohm);
-  return {"heavy_payload", std::move(sys), 4_u_m, 0.015_u_m, 0.03_u_m,
-      3200_u_rpm, 22_u_A, 0.0_u_Nm, 700, 0.006_u_m, 0.02_u_mps, 70};
+  DefBLDC def_bldc(140_A_, 2.5_A_, 3.8_Nm_, 5200_rpm_, 24_V_);
+  DefLinearSys sys(def_bldc, 1, 120_rot_ / 0.75_m_, 2.0_mps2_, 6.5_kg_, 22_N_,
+      1.1_N_ / 4000_rpm_, 25_ms_, 0.08_ohm_);
+  return {"heavy_payload", std::move(sys), 4_m_, 0.015_m_, 0.03_m_, 3200_rpm_,
+      22_A_, 0.0_Nm_, 700, 0.006_m_, 0.02_m_ps, 70};
 }
 
 Scenario make_fast_loop() {
-  DefBLDC def_bldc(90_u_A, 1.2_u_A, 1.9_u_Nm, 6100_u_rpm, 12_u_V);
-  DefLinearSys sys(def_bldc, 1, 90_u_rot / 0.5_u_m, 2.0_u_mps2, 2.2_u_kg, 0_u_N,
-      0_u_N / 5000_u_rpm, 10_u_ms, 0.03_u_ohm);
-  return {"fast_loop", std::move(sys), 6_u_m, 0.015_u_m, 0.03_u_m, 5600_u_rpm,
-      18_u_A, 0.0_u_Nm, 520, 0.003_u_m, 0.015_u_mps, 45};
+  DefBLDC def_bldc(90_A_, 1.2_A_, 1.9_Nm_, 6100_rpm_, 12_V_);
+  DefLinearSys sys(def_bldc, 1, 90_rot_ / 0.5_m_, 2.0_mps2_, 2.2_kg_, 0_N_,
+      0_N_ / 5000_rpm_, 10_ms_, 0.03_ohm_);
+  return {"fast_loop", std::move(sys), 6_m_, 0.015_m_, 0.03_m_, 5600_rpm_,
+      18_A_, 0.0_Nm_, 520, 0.003_m_, 0.015_m_ps, 45};
 }
 
 Scenario make_dual_motor() {
-  DefBLDC def_bldc(110_u_A, 1.9_u_A, 2.2_u_Nm, 5600_u_rpm, 18_u_V);
-  DefLinearSys sys(def_bldc, 2, 150_u_rot / 1.0_u_m, 2.0_u_mps2, 5.0_u_kg,
-      10_u_N, 0.5_u_N / 4500_u_rpm, 18_u_ms, 0.05_u_ohm);
-  return {"dual_motor", std::move(sys), 20_u_m, 0.015_u_m, 0.03_u_m, 3200_u_rpm,
-      80_u_A, 0.0_u_Nm, 680, 0.005_u_m, 0.018_u_mps, 60};
+  DefBLDC def_bldc(110_A_, 1.9_A_, 2.2_Nm_, 5600_rpm_, 18_V_);
+  DefLinearSys sys(def_bldc, 2, 150_rot_ / 1.0_m_, 2.0_mps2_, 5.0_kg_, 10_N_,
+      0.5_N_ / 4500_rpm_, 18_ms_, 0.05_ohm_);
+  return {"dual_motor", std::move(sys), 20_m_, 0.015_m_, 0.03_m_, 3200_rpm_,
+      80_A_, 0.0_Nm_, 680, 0.005_m_, 0.018_m_ps, 60};
 }
 
 Scenario make_high_damping() {
-  DefBLDC def_bldc(125_u_A, 2.2_u_A, 3.0_u_Nm, 5400_u_rpm, 18_u_V);
-  DefLinearSys sys(def_bldc, 1, 180_u_rot / 0.9_u_m, 4.9_u_mps2, 4.0_u_kg,
-      24_u_N, 0_u_N / 4500_u_rpm, 22_u_ms, 0.06_u_ohm);
-  return {"high_damping", std::move(sys), 9_u_m, 0.015_u_m, 0.03_u_m,
-      4200_u_rpm, 36_u_A, 0.00_u_Nm, 600, 0.004_u_m, 0.010_u_mps, 50};
+  DefBLDC def_bldc(125_A_, 2.2_A_, 3.0_Nm_, 5400_rpm_, 18_V_);
+  DefLinearSys sys(def_bldc, 1, 180_rot_ / 0.9_m_, 4.9_mps2_, 4.0_kg_, 24_N_,
+      0_N_ / 4500_rpm_, 22_ms_, 0.06_ohm_);
+  return {"high_damping", std::move(sys), 9_m_, 0.015_m_, 0.03_m_, 4200_rpm_,
+      36_A_, 0.00_Nm_, 600, 0.004_m_, 0.010_m_ps, 50};
 }
 
 Scenario make_model_mismatch() {
-  DefBLDC estimator_bldc(90_u_A, 1.8_u_A, 4.0_u_Nm, 5000_u_rpm, 12_u_V);
-  DefLinearSys estimator_sys(estimator_bldc, 1, 180_u_rot / 0.75_u_m,
-      0.0_u_mps2, 2.8_u_kg, 15_u_N, 0.3_u_N / 3800_u_rpm, 20_u_ms, 0.04_u_ohm);
+  DefBLDC estimator_bldc(90_A_, 1.8_A_, 4.0_Nm_, 5000_rpm_, 12_V_);
+  DefLinearSys estimator_sys(estimator_bldc, 1, 180_rot_ / 0.75_m_, 0.0_mps2_,
+      2.8_kg_, 15_N_, 0.3_N_ / 3800_rpm_, 20_ms_, 0.04_ohm_);
 
-  DefBLDC actual_bldc(180_u_A, 3.5_u_A, 5.5_u_Nm, 6200_u_rpm, 28_u_V);
-  DefLinearSys actual_sys(actual_bldc, 2, 240_u_rot / 0.7_u_m, 7.5_u_mps2,
-      8.8_u_kg, 28_u_N, 1.2_u_N / 5200_u_rpm, 12_u_ms, 0.12_u_ohm);
+  DefBLDC actual_bldc(180_A_, 3.5_A_, 5.5_Nm_, 6200_rpm_, 28_V_);
+  DefLinearSys actual_sys(actual_bldc, 2, 240_rot_ / 0.7_m_, 7.5_mps2_, 8.8_kg_,
+      28_N_, 1.2_N_ / 5200_rpm_, 12_ms_, 0.12_ohm_);
 
-  Scenario scenario{"model_mismatch", estimator_sys, 3_u_m, 0.03_u_m, 0.06_u_m,
-      3600_u_rpm, 30_u_A, 0.00_u_Nm, 850, 0.008_u_m, 0.020_u_mps, 70};
+  Scenario scenario{"model_mismatch", estimator_sys, 3_m_, 0.03_m_, 0.06_m_,
+      3600_rpm_, 30_A_, 0.00_Nm_, 850, 0.008_m_, 0.020_m_ps, 70};
   scenario.sys = actual_sys;
   return scenario;
 }
@@ -150,7 +150,7 @@ int main() {
       SimBLDC sim(scenario.sys);
       sim.SetCurrentLimit(scenario.current_limit);
       sim.SetLoad(scenario.extra_load);
-      radps_t zero_velocity = 0_u_radps;
+      radps_t zero_velocity = 0_rad_;
 
       auto control_period = scenario.sys.control_period;
       int max_steps = scenario.max_steps;
@@ -161,7 +161,7 @@ int main() {
       std::vector<double> vel_samples;
       std::vector<double> output_samples;
       std::vector<meter_t> waypoints = {0.35 * scenario.target_real,
-          scenario.target_real, 0.6 * scenario.target_real, 0.0_u_m};
+          scenario.target_real, 0.6 * scenario.target_real, 0.0_m_};
 
       time_samples.reserve(max_steps * waypoints.size());
       pos_samples.reserve(max_steps * waypoints.size());

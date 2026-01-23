@@ -14,10 +14,10 @@ using namespace pdcsu::util;
 using namespace pdcsu::simulation;
 
 int main() {
-  DefBLDC def_bldc(105_u_A, 1.8_u_A, 2.5_u_Nm, 5676_u_rpm);
-  DefLinearSys def_sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 0.0_u_mps2,
-      3_u_kg, 22_u_N, 0.5_u_N / 5676_u_rpm, 20_u_ms, 0_u_ohm);
-  amp_t clim = 40_u_A;   
+  DefBLDC def_bldc(105_A_, 1.8_A_, 2.5_Nm_, 5676_rpm_);
+  DefLinearSys def_sys(def_bldc, 1, 214.85_rot_ / 262.5_in_, 0.0_mps2_, 3_kg_,
+      22_N_, 0.5_N_ / 5676_rpm_, 20_ms_, 0_ohm_);
+  amp_t clim = 40_A_;
 
   ICNORPositionControl icnor(def_sys);
   icnor.setProjectionHorizon(3);
@@ -25,8 +25,8 @@ int main() {
   SimBLDC simBldc = SimBLDC(def_sys);
   simBldc.SetCurrentLimit(clim);
 
-  icnor.setConstraints(5000_u_rpm, clim);
-  icnor.setTolerance(def_sys.toNative(0.25_u_in), def_sys.toNative(0.5_u_in));
+  icnor.setConstraints(5000_rpm_, clim);
+  icnor.setTolerance(def_sys.toNative(0.25_in_), def_sys.toNative(0.5_in_));
 
   std::ofstream data_file("sim_data.csv");
   data_file << "step,pos,vel,output\n";
@@ -36,8 +36,8 @@ int main() {
   std::vector<double> v_time;
 
   for (int i = 0; i < 100; i++) {
-    simBldc.setControlTarget(icnor.getOutput(def_sys.toNative(45_u_in),
-        0_u_radps, simBldc.getPosition(), simBldc.getVelocity()));
+    simBldc.setControlTarget(icnor.getOutput(def_sys.toNative(45_in_), 0_rad_,
+        simBldc.getPosition(), simBldc.getVelocity()));
     simBldc.Tick(def_sys.control_period);
     double pos = inch_t(def_sys.toReal(simBldc.getPosition())).value();
     double vel = fps_t(def_sys.toReal(simBldc.getVelocity())).value();

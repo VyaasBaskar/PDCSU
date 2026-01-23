@@ -47,7 +47,7 @@ public:
   uVec(T magnitude, pdcsu::units::degree_t theta, bool angleIsBearing = false)
       : uVec() {
     assert(N == 2 && "Polar constructor can only be used with 2D vectors.");
-    if (angleIsBearing) { theta = 90_u_deg - theta; }
+    if (angleIsBearing) { theta = 90_deg_ - theta; }
     data[0] = magnitude * pdcsu::units::u_cos(theta);
     data[1] = magnitude * pdcsu::units::u_sin(theta);
   }
@@ -220,15 +220,21 @@ public:
       return pdcsu::units::u_atan2(data[1], data[0]);
     } catch (std::exception& exc) {
       (void)exc;
-      return 0_u_deg;
+      return 0_deg_;
     }
   }
 
   // Returns the angle between this vector and another
   template <typename UT2>
-  [[nodiscard]] pdcsu::units::degree_t angleTo(
+  [[nodiscard]] pdcsu::units::degree_t angleBetween(
       const uVec<UT2, N>& other, bool angleIsBearing = false) const {
     return other.angle(angleIsBearing) - angle(angleIsBearing);
+  }
+  // Returns the angle of (other - this)
+  template <typename UT2>
+  [[nodiscard]] pdcsu::units::degree_t angleAimTowards(
+      const uVec<UT2, N>& other, bool angleIsBearing = false) const {
+    return (other - *this).angle(angleIsBearing);
   }
 
   // Returns a modified vector with a given delta added to its magnitude

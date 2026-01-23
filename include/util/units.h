@@ -930,122 +930,123 @@ inline scalar_t operator"" _u_(unsigned long long v) {
 }
 
 // Length
-inline meter_t operator"" _u_m(long double v) { return meter_t(v); }
-inline meter_t operator"" _u_m(unsigned long long v) {
+inline meter_t operator"" _m_(long double v) { return meter_t(v); }
+inline meter_t operator"" _m_(unsigned long long v) {
   return meter_t(static_cast<double>(v));
 }
-inline foot_t operator"" _u_ft(long double v) { return foot_t(v); }
-inline foot_t operator"" _u_ft(unsigned long long v) {
+inline foot_t operator"" _ft_(long double v) { return foot_t(v); }
+inline foot_t operator"" _ft_(unsigned long long v) {
   return foot_t(static_cast<double>(v));
 }
-inline inch_t operator"" _u_in(long double v) { return inch_t(v); }
-inline inch_t operator"" _u_in(unsigned long long v) {
+inline inch_t operator"" _in_(long double v) { return inch_t(v); }
+inline inch_t operator"" _in_(unsigned long long v) {
   return inch_t(static_cast<double>(v));
 }
 
 // Mass
-inline kg_t operator"" _u_kg(long double v) { return kg_t(v); }
-inline kg_t operator"" _u_kg(unsigned long long v) {
+inline kg_t operator"" _kg_(long double v) { return kg_t(v); }
+inline kg_t operator"" _kg_(unsigned long long v) {
   return kg_t(static_cast<double>(v));
 }
-inline pound_t operator"" _u_lb(long double v) { return pound_t(v); }
-inline pound_t operator"" _u_lb(unsigned long long v) {
+inline pound_t operator"" _lb_(long double v) { return pound_t(v); }
+inline pound_t operator"" _lb_(unsigned long long v) {
   return pound_t(static_cast<double>(v));
 }
 
 // Time
-inline second_t operator"" _u_s(long double v) { return second_t(v); }
-inline second_t operator"" _u_s(unsigned long long v) {
+inline second_t operator"" _s_(long double v) { return second_t(v); }
+inline second_t operator"" _s_(unsigned long long v) {
   return second_t(static_cast<double>(v));
 }
-inline minute_t operator"" _u_min(long double v) { return minute_t(v); }
-inline minute_t operator"" _u_min(unsigned long long v) {
+inline minute_t operator"" _min_(long double v) { return minute_t(v); }
+inline minute_t operator"" _min_(unsigned long long v) {
   return minute_t(static_cast<double>(v));
 }
-inline ms_t operator"" _u_ms(long double v) { return ms_t(v); }
-inline ms_t operator"" _u_ms(unsigned long long v) {
+inline ms_t operator"" _ms_(long double v) { return ms_t(v); }
+inline ms_t operator"" _ms_(unsigned long long v) {
   return ms_t(static_cast<double>(v));
 }
 
 // Current
-inline amp_t operator"" _u_A(long double v) { return amp_t(v); }
-inline amp_t operator"" _u_A(unsigned long long v) {
+inline amp_t operator"" _A_(long double v) { return amp_t(v); }
+inline amp_t operator"" _A_(unsigned long long v) {
   return amp_t(static_cast<double>(v));
 }
 
 // Angles
-inline degree_t operator"" _u_deg(long double v) { return degree_t(v); }
-inline degree_t operator"" _u_deg(unsigned long long v) {
+inline degree_t operator"" _deg_(long double v) { return degree_t(v); }
+inline degree_t operator"" _deg_(unsigned long long v) {
   return degree_t(static_cast<double>(v));
 }
-inline radian_t operator"" _u_rad(long double v) { return radian_t(v); }
-inline radian_t operator"" _u_rad(unsigned long long v) {
+inline radian_t operator"" _rad_(long double v) { return radian_t(v); }
+inline radian_t operator"" _rad_(unsigned long long v) {
   return radian_t(static_cast<double>(v));
 }
-inline rotation_t operator"" _u_rot(long double v) { return rotation_t(v); }
-inline rotation_t operator"" _u_rot(unsigned long long v) {
+inline rotation_t operator"" _rot_(long double v) { return rotation_t(v); }
+inline rotation_t operator"" _rot_(unsigned long long v) {
   return rotation_t(static_cast<double>(v));
 }
 
 // Derived units
-inline volt_t operator"" _u_V(long double v) { return volt_t(v); }
-inline volt_t operator"" _u_V(unsigned long long v) {
+inline volt_t operator"" _V_(long double v) { return volt_t(v); }
+inline volt_t operator"" _V_(unsigned long long v) {
   return volt_t(static_cast<double>(v));
 }
-inline ohm_t operator"" _u_ohm(long double v) { return ohm_t(v); }
-inline ohm_t operator"" _u_ohm(unsigned long long v) {
+inline ohm_t operator"" _ohm_(long double v) { return ohm_t(v); }
+inline ohm_t operator"" _ohm_(unsigned long long v) {
   return ohm_t(static_cast<double>(v));
 }
-inline hertz_t operator"" _u_Hz(long double v) { return hertz_t(v); }
-inline hertz_t operator"" _u_Hz(unsigned long long v) {
+inline hertz_t operator"" _Hz_(long double v) { return hertz_t(v); }
+inline hertz_t operator"" _Hz_(unsigned long long v) {
   return hertz_t(static_cast<double>(v));
 }
-inline newton_t operator"" _u_N(long double v) { return newton_t(v); }
-inline newton_t operator"" _u_N(unsigned long long v) {
+inline newton_t operator"" _N_(long double v) { return newton_t(v); }
+inline newton_t operator"" _N_(unsigned long long v) {
   return newton_t(static_cast<double>(v));
 }
-inline rpm_t operator"" _u_rpm(long double v) { return rpm_t(v); }
-inline rpm_t operator"" _u_rpm(unsigned long long v) {
+inline rpm_t operator"" _rpm_(long double v) { return rpm_t(v); }
+inline rpm_t operator"" _rpm_(unsigned long long v) {
   return rpm_t(static_cast<double>(v));
 }
-inline nm_t operator"" _u_Nm(long double v) { return nm_t(v); }
-inline nm_t operator"" _u_Nm(unsigned long long v) {
+inline nm_t operator"" _Nm_(long double v) { return nm_t(v); }
+inline nm_t operator"" _Nm_(unsigned long long v) {
   return nm_t(static_cast<double>(v));
 }
-inline radps_t operator"" _u_radps(long double v) { return radps_t(v); }
-inline radps_t operator"" _u_radps(unsigned long long v) {
+inline radps_t operator"" _radps_(long double v) { return radps_t(v); }
+inline radps_t operator"" _radps_(unsigned long long v) {
   return radps_t(static_cast<double>(v));
 }
-inline radps2_t operator"" _u_radps2(long double v) { return radps2_t(v); }
-inline radps2_t operator"" _u_radps2(unsigned long long v) {
+inline radps2_t operator"" _radps2_(long double v) { return radps2_t(v); }
+inline radps2_t operator"" _radps2_(unsigned long long v) {
   return radps2_t(static_cast<double>(v));
 }
-inline degps_t operator"" _u_degps(long double v) { return degps_t(v); }
-inline degps_t operator"" _u_degps(unsigned long long v) {
+inline degps_t operator"" _degps_(long double v) { return degps_t(v); }
+inline degps_t operator"" _degps_(unsigned long long v) {
   return degps_t(static_cast<double>(v));
 }
-inline degps2_t operator"" _u_degps2(long double v) { return degps2_t(v); }
-inline degps2_t operator"" _u_degps2(unsigned long long v) {
+inline degps2_t operator"" _degps2_(long double v) { return degps2_t(v); }
+inline degps2_t operator"" _degps2_(unsigned long long v) {
   return degps2_t(static_cast<double>(v));
 }
-inline mps_t operator"" _u_mps(long double v) { return mps_t(v); }
-inline mps_t operator"" _u_mps(unsigned long long v) {
+inline mps_t operator"" _mps_(long double v) { return mps_t(v); }
+inline mps_t operator"" _mps_(unsigned long long v) {
   return mps_t(static_cast<double>(v));
 }
-inline mps2_t operator"" _u_mps2(long double v) { return mps2_t(v); }
-inline mps2_t operator"" _u_mps2(unsigned long long v) {
+inline mps2_t operator"" _mps2_(long double v) { return mps2_t(v); }
+inline mps2_t operator"" _mps2_(unsigned long long v) {
   return mps2_t(static_cast<double>(v));
 }
-inline fps_t operator"" _u_fps(long double v) { return fps_t(v); }
-inline fps_t operator"" _u_fps(unsigned long long v) {
+
+inline fps_t operator"" _fps_(long double v) { return fps_t(v); }
+inline fps_t operator"" _fps_(unsigned long long v) {
   return fps_t(static_cast<double>(v));
 }
-inline fps2_t operator"" _u_fps2(long double v) { return fps2_t(v); }
-inline fps2_t operator"" _u_fps2(unsigned long long v) {
+inline fps2_t operator"" _fps2_(long double v) { return fps2_t(v); }
+inline fps2_t operator"" _fps2_(unsigned long long v) {
   return fps2_t(static_cast<double>(v));
 }
-inline kgm2_t operator"" _u_kgm2(long double v) { return kgm2_t(v); }
-inline kgm2_t operator"" _u_kgm2(unsigned long long v) {
+inline kgm2_t operator"" _kgm2_(long double v) { return kgm2_t(v); }
+inline kgm2_t operator"" _kgm2_(unsigned long long v) {
   return kgm2_t(static_cast<double>(v));
 }
 

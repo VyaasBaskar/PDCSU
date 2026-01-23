@@ -85,24 +85,24 @@ void test_arithmetic_operations() {
   auto divided = b / 2.0;
   expect_near(divided.value(), 1.75, kEpsilon, "Division by scalar failed");
 
-  auto velocity = 10.0_u_m / 2.0_u_s;
+  auto velocity = 10.0_m_ / 2.0_s_;
   expect_near(velocity.value(), 5.0, kEpsilon,
       "Velocity magnitude mismatch for m/s division");
   expect_equal(velocity.dims(), "m s^-1",
       "Velocity dims() should show length over time");
 
-  auto acceleration = velocity / 2.0_u_s;
+  auto acceleration = velocity / 2.0_s_;
   expect_near(acceleration.value(), 2.5, kEpsilon,
       "Acceleration magnitude mismatch for (m/s)/s");
   expect_equal(acceleration.dims(), "m s^-2",
       "Acceleration dims() should show length over time squared");
 
-  auto area = 2.0_u_m * 3.0_u_m;
+  auto area = 2.0_m_ * 3.0_m_;
   expect_near(area.value(), 6.0, kEpsilon,
       "Area magnitude mismatch for meter multiplication");
   expect_equal(area.dims(), "m^2", "Area dims() should reflect squared length");
 
-  auto torque = 4.0_u_N * 0.5_u_m;
+  auto torque = 4.0_N_ * 0.5_m_;
   expect_near(torque.value(), 2.0, kEpsilon,
       "Torque magnitude mismatch for N*m multiplication");
   expect_equal(torque.dims(), "m^2 kg s^-2",
@@ -141,121 +141,121 @@ void test_comparisons() {
 }
 
 void test_utility_functions() {
-  auto negative_length = -5.0_u_m;
+  auto negative_length = -5.0_m_;
   auto positive_length = u_abs(negative_length);
   expect_near(positive_length.value(), 5.0, kEpsilon,
       "u_abs should produce positive magnitude");
 
-  auto power = u_pow(3.0_u_m, 2.0);
+  auto power = u_pow(3.0_m_, 2.0);
   expect_near(power.value(), 9.0, kEpsilon,
       "u_pow should raise the magnitude to the provided exponent");
 
-  auto copy_signed = u_copysign(5.0_u_m, -3.0_u_m);
+  auto copy_signed = u_copysign(5.0_m_, -3.0_m_);
   expect_near(copy_signed.value(), -5.0, kEpsilon,
       "u_copysign with unit sign should transfer the sign");
 
-  auto copy_signed_double = u_copysign(5.0_u_m, -1.0);
+  auto copy_signed_double = u_copysign(5.0_m_, -1.0);
   expect_near(copy_signed_double.value(), -5.0, kEpsilon,
       "u_copysign with double sign should transfer the sign");
 
-  auto clamped_high = u_clamp(7.0_u_m, 2.0_u_m, 5.0_u_m);
+  auto clamped_high = u_clamp(7.0_m_, 2.0_m_, 5.0_m_);
   expect_near(clamped_high.value(), 5.0, kEpsilon,
       "u_clamp should clamp to the provided maximum");
 
-  auto clamped_low = u_clamp(1.0_u_m, 2.0_u_m, 5.0_u_m);
+  auto clamped_low = u_clamp(1.0_m_, 2.0_m_, 5.0_m_);
   expect_near(clamped_low.value(), 2.0, kEpsilon,
       "u_clamp should clamp to the provided minimum");
 
-  auto min_val = u_min(4.0_u_m, 8.0_u_m);
+  auto min_val = u_min(4.0_m_, 8.0_m_);
   expect_near(min_val.value(), 4.0, kEpsilon, "u_min should pick the smaller");
 
-  auto max_val = u_max(4.0_u_m, 8.0_u_m);
+  auto max_val = u_max(4.0_m_, 8.0_m_);
   expect_near(max_val.value(), 8.0, kEpsilon, "u_max should pick the larger");
 
   // Floor operation
-  auto floor_positive = u_floor(3.7_u_m);
+  auto floor_positive = u_floor(3.7_m_);
   expect_near(floor_positive.value(), 3.0, kEpsilon,
       "u_floor should round down positive values");
 
-  auto floor_negative = u_floor(-3.7_u_m);
+  auto floor_negative = u_floor(-3.7_m_);
   expect_near(floor_negative.value(), -4.0, kEpsilon,
       "u_floor should round down negative values");
 
-  auto floor_exact = u_floor(5.0_u_m);
+  auto floor_exact = u_floor(5.0_m_);
   expect_near(floor_exact.value(), 5.0, kEpsilon,
       "u_floor should preserve exact integer values");
 
   // Ceiling operation
-  auto ceil_positive = u_ceil(3.2_u_m);
+  auto ceil_positive = u_ceil(3.2_m_);
   expect_near(ceil_positive.value(), 4.0, kEpsilon,
       "u_ceil should round up positive values");
 
-  auto ceil_negative = u_ceil(-3.2_u_m);
+  auto ceil_negative = u_ceil(-3.2_m_);
   expect_near(ceil_negative.value(), -3.0, kEpsilon,
       "u_ceil should round up negative values");
 
-  auto ceil_exact = u_ceil(5.0_u_m);
+  auto ceil_exact = u_ceil(5.0_m_);
   expect_near(ceil_exact.value(), 5.0, kEpsilon,
       "u_ceil should preserve exact integer values");
 
   // Round operation
-  auto round_up = u_round(3.6_u_m);
+  auto round_up = u_round(3.6_m_);
   expect_near(
       round_up.value(), 4.0, kEpsilon, "u_round should round up values >= 0.5");
 
-  auto round_down = u_round(3.4_u_m);
+  auto round_down = u_round(3.4_m_);
   expect_near(round_down.value(), 3.0, kEpsilon,
       "u_round should round down values < 0.5");
 
-  auto round_half = u_round(3.5_u_m);
+  auto round_half = u_round(3.5_m_);
   expect_near(round_half.value(), 4.0, kEpsilon, "u_round should round 0.5 up");
 
-  auto round_negative = u_round(-3.6_u_m);
+  auto round_negative = u_round(-3.6_m_);
   expect_near(round_negative.value(), -4.0, kEpsilon,
       "u_round should round negative values correctly");
 
   // Modulo operation - unit % unit
-  auto mod_unit = 10.0_u_m % 3.0_u_m;
+  auto mod_unit = 10.0_m_ % 3.0_m_;
   expect_near(mod_unit.value(), 1.0, kEpsilon,
       "Unit modulo unit should compute remainder correctly");
 
-  auto mod_unit_exact = 9.0_u_m % 3.0_u_m;
+  auto mod_unit_exact = 9.0_m_ % 3.0_m_;
   expect_near(mod_unit_exact.value(), 0.0, kEpsilon,
       "Unit modulo unit should return zero for exact division");
 
   // Modulo operation - unit % int
-  auto mod_int = 10.0_u_m % 3;
+  auto mod_int = 10.0_m_ % 3;
   expect_near(mod_int.value(), 1.0, kEpsilon,
       "Unit modulo int should compute remainder correctly");
 
-  auto mod_int_exact = 12.0_u_m % 4;
+  auto mod_int_exact = 12.0_m_ % 4;
   expect_near(mod_int_exact.value(), 0.0, kEpsilon,
       "Unit modulo int should return zero for exact division");
 
   // Modulo operation - unit % double
-  auto mod_double = 14.0_u_m % 10.5;
+  auto mod_double = 14.0_m_ % 10.5;
   expect_near(mod_double.value(), 3.5, kEpsilon,
       "Unit modulo double should compute remainder correctly");
 
-  auto mod_double_exact = 10.0_u_m % 2.5;
+  auto mod_double_exact = 10.0_m_ % 2.5;
   expect_near(mod_double_exact.value(), 0.0, kEpsilon,
       "Unit modulo double should return zero for exact division");
 
   // Square root operation
-  auto sqrt_simple = u_sqrt(9.0_u_m * 1.0_u_m);
+  auto sqrt_simple = u_sqrt(9.0_m_ * 1.0_m_);
   expect_near(sqrt_simple.value(), 3.0, kEpsilon,
       "u_sqrt should compute square root of area to get length");
 
-  auto sqrt_fractional = u_sqrt(2.25_u_m * 1.0_u_m);
+  auto sqrt_fractional = u_sqrt(2.25_m_ * 1.0_m_);
   expect_near(sqrt_fractional.value(), 1.5, kEpsilon,
       "u_sqrt should handle fractional results correctly");
 
-  auto sqrt_velocity_squared = u_sqrt(16.0_u_mps * 1.0_u_mps);
+  auto sqrt_velocity_squared = u_sqrt(16.0_m_ps * 1.0_m_ps);
   expect_near(sqrt_velocity_squared.value(), 4.0, kEpsilon,
       "u_sqrt should work with derived units");
 
   // Verify sqrt dimensions are halved
-  auto area = 4.0_u_m * 4.0_u_m;
+  auto area = 4.0_m_ * 4.0_m_;
   auto sqrt_area = u_sqrt(area);
   expect_equal(sqrt_area.dims(), "m",
       "u_sqrt should halve dimension exponents (area -> length)");
@@ -265,16 +265,16 @@ void test_trigonometric_functions() {
   constexpr double kPi = 3.14159265358979323846;
   constexpr double kTrigTolerance = 1e-6;
 
-  auto zero = 0.0_u_rad;
+  auto zero = 0.0_rad_;
   expect_near(
       u_sin(zero), 0.0, kEpsilon, "u_sin should match std::sin for radians");
   expect_near(
       u_cos(zero), 1.0, kEpsilon, "u_cos should match std::cos for radians");
 
-  auto ninety_deg = 90.0_u_deg;
+  auto ninety_deg = 90.0_deg_;
   expect_near(u_sin(ninety_deg), 1.0, kTrigTolerance,
       "u_sin should accept degree_t values");
-  expect_near(u_cos(180.0_u_deg), -1.0, kTrigTolerance,
+  expect_near(u_cos(180.0_deg_), -1.0, kTrigTolerance,
       "u_cos should handle degree_t values");
 
   auto asin_val = u_asin(1.0);
@@ -285,27 +285,27 @@ void test_trigonometric_functions() {
   expect_near(atan_val.value(), kPi / 4.0, 1e-9,
       "u_atan should return pi/4 for input 1.0");
 
-  auto atan2_val = u_atan2(1.0_u_m, 1.0_u_m);
+  auto atan2_val = u_atan2(1.0_m_, 1.0_m_);
   expect_near(atan2_val.value(), kPi / 4.0, 1e-9,
       "u_atan2 should produce pi/4 for equal positive inputs");
 
-  expect_near(u_tan(45.0_u_deg), 1.0, kTrigTolerance,
+  expect_near(u_tan(45.0_deg_), 1.0, kTrigTolerance,
       "u_tan should accept degree_t values");
 }
 
 void test_literal_conversions() {
   constexpr double kPi = 3.14159265358979323846;
-  auto inch = 1.0_u_in;
+  auto inch = 1.0_in_;
   expect_near(inch.to_base(), 0.0254, 1e-12,
       "1 inch should convert to 0.0254 meters in base units");
   expect_equal(inch.dims(), "in", "inch_t dims() should report \"in\"");
 
-  auto foot = foot_t(12.0_u_in);
+  auto foot = foot_t(12.0_in_);
   expect_near(
       foot.value(), 1.0, kEpsilon, "12 inches should equal 1 foot in value()");
   expect_equal(foot.dims(), "ft", "foot_t dims() should report \"ft\"");
 
-  auto pound = 1.0_u_lb;
+  auto pound = 1.0_lb_;
   expect_near(pound.to_base(), 0.4535924, 1e-7,
       "1 pound should convert to 0.4535924 kilograms in base units");
   expect_equal(pound.dims(), "lb", "pound_t dims() should report \"lb\"");
@@ -315,7 +315,7 @@ void test_literal_conversions() {
       "Converting pound_t to kg_t should preserve base value");
   expect_equal(kilogram.dims(), "kg", "kg_t dims() should report \"kg\"");
 
-  auto rpm = 60.0_u_rpm;
+  auto rpm = 60.0_rpm_;
   expect_near(rpm.to_base(), 2.0 * kPi, 5e-5,
       "60 RPM should equal 2*pi rad/s in base units");
   expect_equal(
@@ -325,22 +325,22 @@ void test_literal_conversions() {
   expect_equal(
       radps.dims(), "s^-1 rad", "radps_t dims() should be radians per second");
 
-  auto degps2 = 30.0_u_degps2;
+  auto degps2 = 30.0_deg_ps2;
   expect_equal(degps2.dims(), "s^-2 deg",
       "degps2_t dims() should be degrees per second squared");
 }
 
 void test_dimension_tagging() {
-  auto square_foot = 2.0_u_ft * 3.0_u_ft;
+  auto square_foot = 2.0_ft_ * 3.0_ft_;
   expect_equal(square_foot.dims(), "ft^2",
       "Multiplying feet should yield ft^2 dimensions");
 
-  auto mixed_area = 1.0_u_ft * 1.0_u_m;
+  auto mixed_area = 1.0_ft_ * 1.0_m_;
   expect_equal(mixed_area.dims(), "m^2",
       "Mixed metric/imperial length multiplication should resolve to mixed "
       "metric tag");
 
-  auto total_length = 1.0_u_m + 3.0_u_ft;
+  auto total_length = 1.0_m_ + 3.0_ft_;
   expect_equal(total_length.dims(), "m",
       "Adding different length tags should retain the metric tag");
   expect_near(total_length.value(), 1.0 + 0.9144, 1e-6,
@@ -348,27 +348,27 @@ void test_dimension_tagging() {
 }
 
 void test_compound_units() {
-  auto mass = 2.0_u_kg;
-  auto accel = 3.0_u_mps2;
+  auto mass = 2.0_kg_;
+  auto accel = 3.0_mps2_;
   auto force = mass * accel;
   expect_equal(force.dims(), "m kg s^-2",
       "Force should have dimensions of mass*length/time^2");
   expect_near(
       force.value(), 6.0, kEpsilon, "2 kg * 3 m/s^2 should equal 6 newtons");
 
-  auto distance = 5.0_u_m;
+  auto distance = 5.0_m_;
   auto work = force * distance;
   expect_equal(work.dims(), "m^2 kg s^-2",
       "Work should have dimensions of mass*length^2/time^2");
   expect_near(work.value(), 30.0, kEpsilon, "6 N * 5 m should equal 30 joules");
 
-  auto power = work / 2.0_u_s;
+  auto power = work / 2.0_s_;
   expect_equal(power.dims(), "m^2 kg s^-3",
       "Power should have dimensions of joules per second");
   expect_near(
       power.value(), 15.0, kEpsilon, "30 J / 2 s should equal 15 watts");
 
-  auto frequency = 2.0_u_Hz;
+  auto frequency = 2.0_Hz_;
   auto period = scalar_t(1.0) / frequency;
   expect_equal(period.dims(), "s", "Inverse of frequency should yield seconds");
   expect_near(

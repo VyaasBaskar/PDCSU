@@ -10,9 +10,9 @@
 #include <iostream>
 #include <vector>
 
+#include "simulation/simbldc.h"
 #include "util/sysdef.h"
 #include "util/units.h"
-#include "simulation/simbldc.h"
 
 using namespace pdcsu::util;
 using namespace pdcsu::units;
@@ -27,17 +27,17 @@ struct Scenario {
 };
 
 Scenario make_baseline() {
-  DefBLDC def_bldc(105_u_A, 1.8_u_A, 2.5_u_Nm, 5676_u_rpm);
-  DefLinearSys sys(def_bldc, 1, 214.85_u_rot / 262.5_u_in, 0.0_u_mps2, 3_u_kg,
-      11_u_N, 0.55_u_N / 5676_u_rpm, 20_u_ms, 0.05_u_ohm);
-  return {"baseline_linear", std::move(sys), 32_u_A, 0.0_u_Nm, 800};
+  DefBLDC def_bldc(105_A_, 1.8_A_, 2.5_Nm_, 5676_rpm_);
+  DefLinearSys sys(def_bldc, 1, 214.85_rot_ / 262.5_in_, 0.0_mps2_, 3_kg_,
+      11_N_, 0.55_N_ / 5676_rpm_, 20_ms_, 0.05_ohm_);
+  return {"baseline_linear", std::move(sys), 32_A_, 0.0_Nm_, 800};
 }
 
 Scenario make_fast_loop() {
-  DefBLDC def_bldc(90_u_A, 1.2_u_A, 1.9_u_Nm, 6100_u_rpm, 12_u_V);
-  DefLinearSys sys(def_bldc, 1, 90_u_rot / 0.5_u_m, 0.0_u_mps2, 2.2_u_kg, 0_u_N,
-      0_u_N / 5000_u_rpm, 10_u_ms, 0.03_u_ohm);
-  return {"fast_loop", std::move(sys), 18_u_A, 0.0_u_Nm, 600};
+  DefBLDC def_bldc(90_A_, 1.2_A_, 1.9_Nm_, 6100_rpm_, 12_V_);
+  DefLinearSys sys(def_bldc, 1, 90_rot_ / 0.5_m_, 0.0_mps2_, 2.2_kg_, 0_N_,
+      0_N_ / 5000_rpm_, 10_ms_, 0.03_ohm_);
+  return {"fast_loop", std::move(sys), 18_A_, 0.0_Nm_, 600};
 }
 
 int main() {
@@ -45,26 +45,28 @@ int main() {
 #ifdef _WIN32
   _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
   _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
-  _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_CHECK_ALWAYS_DF |
-                 _CRTDBG_LEAK_CHECK_DF);
+  _CrtSetDbgFlag(
+      _CRTDBG_ALLOC_MEM_DF | _CRTDBG_CHECK_ALWAYS_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 #endif
 
   std::cout.setf(std::ios::unitbuf);
 
-  std::filesystem::path results_dir = std::filesystem::current_path() / "results";
+  std::filesystem::path results_dir =
+      std::filesystem::current_path() / "results";
   std::error_code mkdir_ec;
   std::filesystem::create_directories(results_dir, mkdir_ec);
   if (mkdir_ec) {
-    std::cerr << "[warning] unable to create results directory at " << results_dir
-              << ": " << mkdir_ec.message() << std::endl;
+    std::cerr << "[warning] unable to create results directory at "
+              << results_dir << ": " << mkdir_ec.message() << std::endl;
   }
 
   std::vector<Scenario> scenarios;
   scenarios.push_back(make_baseline());
   scenarios.push_back(make_fast_loop());
 
-  std::cout << "Running " << scenarios.size() << " SimBLDC scenarios..." << std::endl;
+  std::cout << "Running " << scenarios.size() << " SimBLDC scenarios..."
+            << std::endl;
 
   for (auto &scenario : scenarios) {
     std::cout << "\n=== " << scenario.name << " ===" << std::endl;
@@ -85,7 +87,8 @@ int main() {
 
       for (int step = 0; step < scenario.steps; ++step) {
         double phase = (2.0 * step) / scenario.steps;
-        double DC = (phase < 1.0) ? (-0.8 + 1.6 * phase) : (0.8 - 1.6 * (phase - 1.0));
+        double DC =
+            (phase < 1.0) ? (-0.8 + 1.6 * phase) : (0.8 - 1.6 * (phase - 1.0));
 
         sim.setControlTarget(DC);
         sim.Tick(scenario.sys.control_period);
@@ -100,12 +103,11 @@ int main() {
       for (int step = 0; step < return_steps; ++step) {
         double pos_real = scenario.sys.toReal(sim.getPosition()).value();
         double vel_real = scenario.sys.toReal(sim.getVelocity()).value();
-        
-        if (std::abs(pos_real) < pos_tolerance && std::abs(vel_real) < vel_tolerance) {
+
+        if (std::abs(pos_real) < pos_tolerance &&
+            std::abs(vel_real) < vel_tolerance) {
           ++settle_count;
-          if (settle_count >= settle_window) {
-            break;
-          }
+          if (settle_count >= settle_window) { break; }
         } else {
           settle_count = 0;
         }
@@ -131,47 +133,57 @@ int main() {
         output_samples.push_back(0.0);
       }
 
-      std::filesystem::path csvpath = results_dir / ("simbldc_" + scenario.name + ".csv");
+      std::filesystem::path csvpath =
+          results_dir / ("simbldc_" + scenario.name + ".csv");
       std::ofstream csv(csvpath, std::ios::trunc);
       if (csv.is_open()) {
         csv << std::fixed << std::setprecision(6) << "step,pos,vel,output\n";
         for (size_t i = 0; i < pos_samples.size(); ++i) {
-          csv << i << ',' << pos_samples[i] << ',' << vel_samples[i]
-              << ',' << output_samples[i] << '\n';
+          csv << i << ',' << pos_samples[i] << ',' << vel_samples[i] << ','
+              << output_samples[i] << '\n';
         }
         csv.close();
         std::cout << "  wrote " << csvpath << std::endl;
 
-        std::filesystem::path graphpath = results_dir / ("simbldc_" + scenario.name + ".png");
-        std::filesystem::path script_path = std::filesystem::current_path() / "graph_simbldc.py";
+        std::filesystem::path graphpath =
+            results_dir / ("simbldc_" + scenario.name + ".png");
+        std::filesystem::path script_path =
+            std::filesystem::current_path() / "graph_simbldc.py";
         if (std::filesystem::exists(script_path)) {
           std::string csv_str = csvpath.string();
           std::string graph_str = graphpath.string();
           std::string script_str = script_path.string();
 #ifdef _WIN32
-          std::string cmd = "python \"" + script_str + "\" \"" + csv_str + "\" \"" + graph_str + "\"";
+          std::string cmd = "python \"" + script_str + "\" \"" + csv_str +
+                            "\" \"" + graph_str + "\"";
 #else
-          std::string cmd = "python3 \"" + script_str + "\" \"" + csv_str + "\" \"" + graph_str + "\"";
+          std::string cmd = "python3 \"" + script_str + "\" \"" + csv_str +
+                            "\" \"" + graph_str + "\"";
 #endif
           int result = std::system(cmd.c_str());
           if (result == 0) {
             std::cout << "  generated graph: " << graphpath << std::endl;
           } else {
-            std::cerr << "  [warning] graph generation failed for " << scenario.name << std::endl;
+            std::cerr << "  [warning] graph generation failed for "
+                      << scenario.name << std::endl;
           }
         } else {
-          std::cerr << "  [warning] graph script not found: " << script_path << std::endl;
+          std::cerr << "  [warning] graph script not found: " << script_path
+                    << std::endl;
         }
       } else {
-        std::cerr << "[warning] unable to open results CSV for " << scenario.name << std::endl;
+        std::cerr << "[warning] unable to open results CSV for "
+                  << scenario.name << std::endl;
       }
 
       if (!pos_samples.empty()) {
-        std::cout << "  final pos: " << pos_samples.back() << " m, final vel: "
-                  << vel_samples.back() << " m/s" << std::endl;
+        std::cout << "  final pos: " << pos_samples.back()
+                  << " m, final vel: " << vel_samples.back() << " m/s"
+                  << std::endl;
       }
     } catch (const std::exception &e) {
-      std::cerr << "ERROR in scenario " << scenario.name << ": " << e.what() << std::endl;
+      std::cerr << "ERROR in scenario " << scenario.name << ": " << e.what()
+                << std::endl;
     } catch (...) {
       std::cerr << "UNKNOWN ERROR in scenario " << scenario.name << std::endl;
     }
