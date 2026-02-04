@@ -107,7 +107,7 @@ public:
     position_error -= current_velocity * kD;
     integral_ += position_error * control_period;
     integral_ = std::clamp(integral_, -max_integral_, max_integral_);
-    if (position_error > activation_threshold)
+    if (u_abs(position_error) > activation_threshold)
       integral_ *=
           1 - std::abs(u_tanh(1_rad_ * position_error / activation_threshold));
     else

@@ -250,7 +250,7 @@ void test_utility_functions() {
   expect_near(sqrt_fractional.value(), 1.5, kEpsilon,
       "u_sqrt should handle fractional results correctly");
 
-  auto sqrt_velocity_squared = u_sqrt(16.0_m_ps * 1.0_m_ps);
+  auto sqrt_velocity_squared = u_sqrt(16.0_mps_ * 1.0_mps_);
   expect_near(sqrt_velocity_squared.value(), 4.0, kEpsilon,
       "u_sqrt should work with derived units");
 
@@ -325,7 +325,7 @@ void test_literal_conversions() {
   expect_equal(
       radps.dims(), "s^-1 rad", "radps_t dims() should be radians per second");
 
-  auto degps2 = 30.0_deg_ps2;
+  auto degps2 = 30.0_degps2_;
   expect_equal(degps2.dims(), "s^-2 deg",
       "degps2_t dims() should be degrees per second squared");
 }

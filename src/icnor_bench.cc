@@ -12,17 +12,15 @@
 #include <tuple>
 #include <vector>
 
-#include "control/icnor.h"
-#include "control/util.h"
+#include "pdcsu_control.h"
+#include "pdcsu.h"
+#include "pdcsu_units.h"
 #include "gclass.h"
-#include "simulation/simbldc.h"
+
 
 using namespace pdcsu::control;
-using namespace pdcsu::units;
-using namespace pdcsu::util;
 using namespace pdcsu::simulation;
 
-namespace {
 
 struct Scenario {
   std::string name;
@@ -44,7 +42,7 @@ Scenario make_baseline() {
   DefLinearSys sys(def_bldc, 1, 214.85_rot_ / 262.5_in_, 1.0_mps2_, 3_kg_,
       11_N_, 0.55_N_ / 5676_rpm_, 20_ms_, 0.05_ohm_);
   return {"baseline_linear", std::move(sys), 3.5_m_, 0.015_m_, 0.03_m_,
-      4200_rpm_, 60_A_, 0.0_Nm_, 600, 0.004_m_, 0.01_m_ps, 50};
+      4200_rpm_, 60_A_, 0.0_Nm_, 600, 0.004_m_, 0.01_mps_, 50};
 }
 
 Scenario make_heavy_payload() {
@@ -52,7 +50,7 @@ Scenario make_heavy_payload() {
   DefLinearSys sys(def_bldc, 1, 120_rot_ / 0.75_m_, 2.0_mps2_, 6.5_kg_, 22_N_,
       1.1_N_ / 4000_rpm_, 25_ms_, 0.08_ohm_);
   return {"heavy_payload", std::move(sys), 4_m_, 0.015_m_, 0.03_m_, 3200_rpm_,
-      22_A_, 0.0_Nm_, 700, 0.006_m_, 0.02_m_ps, 70};
+      22_A_, 0.0_Nm_, 700, 0.006_m_, 0.02_mps_, 70};
 }
 
 Scenario make_fast_loop() {
@@ -60,7 +58,7 @@ Scenario make_fast_loop() {
   DefLinearSys sys(def_bldc, 1, 90_rot_ / 0.5_m_, 2.0_mps2_, 2.2_kg_, 0_N_,
       0_N_ / 5000_rpm_, 10_ms_, 0.03_ohm_);
   return {"fast_loop", std::move(sys), 6_m_, 0.015_m_, 0.03_m_, 5600_rpm_,
-      18_A_, 0.0_Nm_, 520, 0.003_m_, 0.015_m_ps, 45};
+      18_A_, 0.0_Nm_, 520, 0.003_m_, 0.015_mps_, 45};
 }
 
 Scenario make_dual_motor() {
@@ -68,7 +66,7 @@ Scenario make_dual_motor() {
   DefLinearSys sys(def_bldc, 2, 150_rot_ / 1.0_m_, 2.0_mps2_, 5.0_kg_, 10_N_,
       0.5_N_ / 4500_rpm_, 18_ms_, 0.05_ohm_);
   return {"dual_motor", std::move(sys), 20_m_, 0.015_m_, 0.03_m_, 3200_rpm_,
-      80_A_, 0.0_Nm_, 680, 0.005_m_, 0.018_m_ps, 60};
+      80_A_, 0.0_Nm_, 680, 0.005_m_, 0.018_mps_, 60};
 }
 
 Scenario make_high_damping() {
@@ -76,7 +74,7 @@ Scenario make_high_damping() {
   DefLinearSys sys(def_bldc, 1, 180_rot_ / 0.9_m_, 4.9_mps2_, 4.0_kg_, 24_N_,
       0_N_ / 4500_rpm_, 22_ms_, 0.06_ohm_);
   return {"high_damping", std::move(sys), 9_m_, 0.015_m_, 0.03_m_, 4200_rpm_,
-      36_A_, 0.00_Nm_, 600, 0.004_m_, 0.010_m_ps, 50};
+      36_A_, 0.00_Nm_, 600, 0.004_m_, 0.010_mps_, 50};
 }
 
 Scenario make_model_mismatch() {
@@ -89,12 +87,10 @@ Scenario make_model_mismatch() {
       28_N_, 1.2_N_ / 5200_rpm_, 12_ms_, 0.12_ohm_);
 
   Scenario scenario{"model_mismatch", estimator_sys, 3_m_, 0.03_m_, 0.06_m_,
-      3600_rpm_, 30_A_, 0.00_Nm_, 850, 0.008_m_, 0.020_m_ps, 70};
+      3600_rpm_, 30_A_, 0.00_Nm_, 850, 0.008_m_, 0.020_mps_, 70};
   scenario.sys = actual_sys;
   return scenario;
 }
-
-}  // namespace
 
 int main() {
 #ifdef _DEBUG
@@ -150,7 +146,7 @@ int main() {
       SimBLDC sim(scenario.sys);
       sim.SetCurrentLimit(scenario.current_limit);
       sim.SetLoad(scenario.extra_load);
-      radps_t zero_velocity = 0_rad_;
+      radps_t zero_velocity = 0_radps_;
 
       auto control_period = scenario.sys.control_period;
       int max_steps = scenario.max_steps;

@@ -12,6 +12,14 @@ namespace detail {
 
 constexpr std::int64_t abs_i64(std::int64_t v) { return v < 0 ? -v : v; }
 
+/* O(1) remainder; std::fmod can be O(|x/y|) when |x| >> |y|. */
+inline double fmod_fast(double x, double y) {
+  if (y == 0 || !std::isfinite(x) || !std::isfinite(y))
+    return std::fmod(x, y);
+  double q = std::trunc(x / y);
+  return x - q * y;
+}
+
 constexpr std::int64_t gcd_i64(std::int64_t a, std::int64_t b) {
   return b == 0 ? abs_i64(a) : gcd_i64(b, a % b);
 }
@@ -590,7 +598,7 @@ public:
   template <typename Fac2, typename L2, typename M2, typename T2, typename I2,
       typename R2, typename LTag2, typename MTag2, typename TTag2,
       typename ITag2, typename RTag2>
-  constexpr Unit operator%(
+  Unit operator%(
       const Unit<Fac2, L2, M2, T2, I2, R2, LTag2, MTag2, TTag2, ITag2, RTag2>
           &o) const {
     using __pdcsu_units_lhs_dims [[maybe_unused]] =
@@ -605,15 +613,15 @@ public:
         "pdcsu::units::Unit::operator% requires matching (L,M,T,I,R); compare "
         "__pdcsu_units_lhs_dims vs __pdcsu_units_rhs_dims and "
         "__pdcsu_units_lhs_tags vs __pdcsu_units_rhs_tags.");
-    return Unit(std::fmod(value(), o.value()));
+    return Unit(detail::fmod_fast(value(), o.value()));
   }
 
-  constexpr Unit operator%(int s) const {
-    return Unit(std::fmod(value(), static_cast<double>(s)));
+  Unit operator%(int s) const {
+    return Unit(detail::fmod_fast(value(), static_cast<double>(s)));
   }
 
-  constexpr Unit operator%(double s) const {
-    return Unit(std::fmod(value(), s));
+  Unit operator%(double s) const {
+    return Unit(detail::fmod_fast(value(), s));
   }
 
   friend constexpr Unit operator*(double lhs, const Unit &rhs) {
@@ -922,6 +930,10 @@ static inline radian_t u_atan2(const UY &y, const UX &x) {
 }
 
 // Literals
+// Undef Windows MMX macro that conflicts with _m_ suffix
+#ifdef _m_
+#undef _m_
+#endif
 
 // Scalar
 inline scalar_t operator"" _u_(long double v) { return scalar_t(v); }
