@@ -44,10 +44,10 @@ public:
     nm_t friction_load = 0.0_Nm_;
 
     if (!cut) {
-      friction_load = base_plant.friction * friction_scale_ *
-                      u_tanh(1_rad_ * 2.0 * omega /
-                             omega_max_);  // Magic number 2.0 adjusted to
-                                           // match experimental data
+      friction_load = base_plant.friction * friction_scale_;
+      // * u_tanh(1_rad_ * 2.0 * omega /
+      //                        omega_max_);  // Magic number 2.0 adjusted to
+      //                                      // match experimental data
     }
 
     nm_t total_load = total_external + friction_load;
@@ -87,8 +87,10 @@ class PositionErrorAccumulator {
 private:
   UnitCompound<radian_t, second_t> integral_ = 0.0_rad_ * 0.0_s_;
   UnitCompound<radian_t, second_t> max_integral_ = 0.04_rad_ * 0.0_s_;
-  double max_output_ = 0.04;
+  double max_output_ = 0.07;
   second_t kD = 0.007_s_;
+  UnitDivision<scalar_t, degree_t> kP = 0.05 / 3.0_deg_;
+  scalar_t max_proportional_output = 0.05_u_;
 
 public:
   PositionErrorAccumulator() = default;
@@ -110,11 +112,14 @@ public:
     if (u_abs(position_error) > activation_threshold)
       integral_ *=
           1 - std::abs(u_tanh(1_rad_ * position_error / activation_threshold));
-    else
-      integral_ *=
-          std::abs(u_tanh(1_rad_ * position_error / activation_threshold));
+    // else
+    //   integral_ *=
+    //       std::abs(u_tanh(1_rad_ * position_error / activation_threshold));
 
-    return std::clamp(integral_.value(), -max_output_, max_output_);
+    scalar_t proportional_output = position_error * kP;
+    proportional_output = u_clamp(proportional_output, -max_proportional_output, max_proportional_output);
+
+    return std::clamp(integral_.value() + proportional_output.value(), -max_output_, max_output_);
   }
 
   void reset() { integral_ = 0.0_rad_ * 0.0_s_; }

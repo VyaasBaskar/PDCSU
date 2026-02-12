@@ -955,7 +955,7 @@ public:
     const second_t control_period_sec = plant.control_period;
     const double main_output =
         (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, cut);
-    const double accumulator_output = pos_accumulator_.update(
+    const double accumulator_output = cut ? 0.0 : pos_accumulator_.update(
         pos_error, v0, control_period_sec, activation_threshold, main_output);
 
     if (learner_) {
