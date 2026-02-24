@@ -484,7 +484,8 @@ private:
     ctx.M11 = t + invZ * (K - 1.0);
     ctx.det = ctx.M00 * ctx.M11 - ctx.M01 * ctx.M10;
 
-    ctx.rhs0_const = Z * (T - x0) - v0 * one_minus_K;
+    const double T_at_t = T + P * t;
+    ctx.rhs0_const = Z * (T_at_t - x0) - v0 * one_minus_K;
     ctx.rhs0_beta =
         (t3 * Z / 3.0) + 2.0 * t2 + 2.0 * t * invZ + 2.0 * invZ2 * one_minus_K;
     ctx.rhs0_gamma = (-Z * t4 / 4.0) - t3 + 3.0 * t2 * invZ + 6.0 * t * invZ2 +
@@ -954,9 +955,12 @@ public:
     const radian_t activation_threshold = desat_thresh * 0.5;
     const second_t control_period_sec = plant.control_period;
     const double main_output =
-        (cut ? 0.0 : orig_output) + ffModel.FF(x0, v0, cut);
-    const double accumulator_output = cut ? 0.0 : pos_accumulator_.update(
-        pos_error, v0, control_period_sec, activation_threshold, main_output);
+        (cut ? (P / radps_t(plant.def_bldc.free_speed)).value() : orig_output) +
+        ffModel.FF(x0, v0, cut);
+    const double accumulator_output =
+        cut ? 0.0
+            : pos_accumulator_.update(pos_error, v0, control_period_sec,
+                  activation_threshold, main_output);
 
     if (learner_) {
       learner_->putLearningSample(ICNORLearningSample{x0.value(), v0.value(),

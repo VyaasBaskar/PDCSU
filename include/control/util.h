@@ -86,11 +86,11 @@ public:
 class PositionErrorAccumulator {
 private:
   UnitCompound<radian_t, second_t> integral_ = 0.0_rad_ * 0.0_s_;
-  UnitCompound<radian_t, second_t> max_integral_ = 0.04_rad_ * 0.0_s_;
-  double max_output_ = 0.07;
+  UnitCompound<radian_t, second_t> max_integral_ = 0.02_rad_ * 0.0_s_;
+  double max_output_ = 0.02;
   second_t kD = 0.007_s_;
-  UnitDivision<scalar_t, degree_t> kP = 0.05 / 3.0_deg_;
-  scalar_t max_proportional_output = 0.05_u_;
+  UnitDivision<scalar_t, degree_t> kP = 0.02 / 3.0_deg_;
+  scalar_t max_proportional_output = 0.02_u_;
 
 public:
   PositionErrorAccumulator() = default;
