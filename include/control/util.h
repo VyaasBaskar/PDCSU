@@ -35,7 +35,7 @@ public:
     friction_scale_ = std::clamp(friction_scale, 0.5, 2.0);
   }
 
-  double FF(radian_t theta, radps_t omega, bool cut) const {
+  double FF(radian_t theta, radps_t omega, double og_output, bool cut) const {
     nm_t load = base_plant.load_function(theta, omega);
     nm_t viscous_load = base_plant.viscous_damping * u_abs(omega);
     viscous_load = u_copysign(viscous_load, omega);
@@ -45,6 +45,13 @@ public:
 
     if (!cut) {
       friction_load = base_plant.friction * friction_scale_;
+      if (u_abs(omega / omega_max_) < 0.02_u_) {
+        if (og_output > 0.0) {
+          friction_load = u_abs(friction_load);
+        } else {
+          friction_load = -u_abs(friction_load);
+        }
+      }
       // * u_tanh(1_rad_ * 2.0 * omega /
       //                        omega_max_);  // Magic number 2.0 adjusted to
       //                                      // match experimental data
@@ -117,9 +124,11 @@ public:
     //       std::abs(u_tanh(1_rad_ * position_error / activation_threshold));
 
     scalar_t proportional_output = position_error * kP;
-    proportional_output = u_clamp(proportional_output, -max_proportional_output, max_proportional_output);
+    proportional_output = u_clamp(
+        proportional_output, -max_proportional_output, max_proportional_output);
 
-    return std::clamp(integral_.value() + proportional_output.value(), -max_output_, max_output_);
+    return std::clamp(integral_.value() + proportional_output.value(),
+        -max_output_, max_output_);
   }
 
   void reset() { integral_ = 0.0_rad_ * 0.0_s_; }

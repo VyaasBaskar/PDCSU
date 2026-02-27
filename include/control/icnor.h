@@ -956,7 +956,7 @@ public:
     const second_t control_period_sec = plant.control_period;
     const double main_output =
         (cut ? (P / radps_t(plant.def_bldc.free_speed)).value() : orig_output) +
-        ffModel.FF(x0, v0, cut);
+        ffModel.FF(x0, v0, orig_output, cut);
     const double accumulator_output =
         cut ? 0.0
             : pos_accumulator_.update(pos_error, v0, control_period_sec,
